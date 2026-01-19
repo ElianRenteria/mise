@@ -144,9 +144,15 @@
 
 		try {
 			// Update user name
-			await pb.collection('users').update(userId, {
+			const updatedUser = await pb.collection('users').update(userId, {
 				name: name.trim()
 			});
+
+			// Update DiceBear avatar if user doesn't have a custom avatar
+			if (!updatedUser.avatar) {
+				const seed = name.trim() || email.split('@')[0];
+				avatarUrl = `https://api.dicebear.com/9.x/dylan/svg?seed=${encodeURIComponent(seed)}`;
+			}
 
 			// Update or create preferences
 			const prefsData = {
