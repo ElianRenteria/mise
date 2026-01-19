@@ -96,17 +96,20 @@
 	function formatDate(dateString: string): string {
 		const date = new Date(dateString);
 		const now = new Date();
-		const diff = now.getTime() - date.getTime();
-		const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
-		if (days === 0) {
-			return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-		} else if (days === 1) {
-			return 'yesterday';
-		} else if (days < 7) {
-			return date.toLocaleDateString('en-US', { weekday: 'short' });
+		// Reset times to midnight for accurate day comparison
+		const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		const diffDays = Math.floor((today.getTime() - dateDay.getTime()) / (1000 * 60 * 60 * 24));
+
+		if (diffDays === 0) {
+			return 'today';
+		} else if (diffDays < 7) {
+			// Within the last week - show day name (lowercase)
+			return date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
 		} else {
-			return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+			// Older than a week - show month and day (lowercase)
+			return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toLowerCase();
 		}
 	}
 
