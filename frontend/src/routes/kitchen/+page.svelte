@@ -14,31 +14,49 @@
 	// Agent state for Bruno animation
 	type AgentState = 'initializing' | 'listening' | 'thinking' | 'speaking';
 	let agentState: AgentState = $state('initializing');
-	let showWinking: boolean = $state(false);
-	let talkingInterval: ReturnType<typeof setInterval> | null = null;
 
 	// User speaking state for voice indicator
 	let userIsSpeaking: boolean = $state(false);
 
-	// Toggle between standing and winking when speaking
+	// Tool usage tracking
+	let isUsingTool: boolean = $state(false);
+	let currentToolName: string = $state('');
+
+	// Show thinking state with minimum duration
+	let showThinking: boolean = $state(false);
+	let thinkingTimeout: ReturnType<typeof setTimeout> | null = null;
+	const MINIMUM_THINKING_DURATION = 4000; // Show thinking for at least 4 seconds
+
+	// Keep thinking state visible for minimum duration (but not during speaking)
 	$effect(() => {
+		// Speaking always takes priority - immediately hide thinking
 		if (agentState === 'speaking') {
-			// Start alternating images
-			talkingInterval = setInterval(() => {
-				showWinking = !showWinking;
-			}, 300); // Toggle every 300ms for talking effect
-		} else {
-			// Stop alternating and show standing
-			if (talkingInterval) {
-				clearInterval(talkingInterval);
-				talkingInterval = null;
+			if (thinkingTimeout) {
+				clearTimeout(thinkingTimeout);
+				thinkingTimeout = null;
 			}
-			showWinking = false;
+			showThinking = false;
+			return;
+		}
+
+		if (agentState === 'thinking' || isUsingTool) {
+			// Clear any pending timeout
+			if (thinkingTimeout) {
+				clearTimeout(thinkingTimeout);
+				thinkingTimeout = null;
+			}
+			showThinking = true;
+		} else if (showThinking && agentState === 'listening') {
+			// Only delay hiding if we're going back to listening (not speaking)
+			thinkingTimeout = setTimeout(() => {
+				showThinking = false;
+				thinkingTimeout = null;
+			}, MINIMUM_THINKING_DURATION);
 		}
 
 		return () => {
-			if (talkingInterval) {
-				clearInterval(talkingInterval);
+			if (thinkingTimeout) {
+				clearTimeout(thinkingTimeout);
 			}
 		};
 	});
@@ -54,6 +72,30 @@
 			if (state) {
 				console.log('Agent state changed:', state);
 				agentState = state;
+			}
+
+			// Check for tool usage - agents often report this via attributes
+			const toolCall = participant.attributes['lk.agent.llm.tool_call'];
+			if (toolCall) {
+				try {
+					const toolData = JSON.parse(toolCall);
+					isUsingTool = true;
+					currentToolName = toolData.name || toolData.tool || 'tool';
+					console.log('Agent using tool:', currentToolName);
+				} catch {
+					// Tool call might be a simple string
+					isUsingTool = true;
+					currentToolName = toolCall;
+				}
+			} else if (changedAttributes['lk.agent.llm.tool_call'] === '') {
+				// Tool call cleared
+				isUsingTool = false;
+				currentToolName = '';
+			}
+
+			// Also check for thinking state to indicate tool usage
+			if (state === 'thinking') {
+				// Could be using a tool or just thinking
 			}
 		}
 	}
@@ -358,50 +400,155 @@
 		border-radius: 9999px;
 		transition: opacity 0.2s ease;
 	}
+
+	/* Tool usage indicator */
+	.tool-indicator {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 10px 18px;
+		background: rgba(130, 129, 131, 0.1);
+		border-radius: 9999px;
+		border: 1px solid rgba(130, 129, 131, 0.2);
+	}
+
+	.tool-spinner {
+		width: 18px;
+		height: 18px;
+		border: 2px solid rgba(130, 129, 131, 0.3);
+		border-top-color: #828183;
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	/* Bruno speaking indicator */
+	.bruno-speaking-indicator {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 16px;
+		background: rgba(181, 173, 163, 0.2);
+		border-radius: 9999px;
+		transition: opacity 0.2s ease;
+	}
+
+	.bruno-voice-wave {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 3px;
+		height: 24px;
+	}
+
+	.bruno-voice-wave .bar {
+		width: 4px;
+		height: 100%;
+		background: #998f83;
+		border-radius: 2px;
+		animation: wave 0.8s ease-in-out infinite;
+	}
+
+	.bruno-voice-wave .bar:nth-child(1) { animation-delay: 0s; }
+	.bruno-voice-wave .bar:nth-child(2) { animation-delay: 0.1s; }
+	.bruno-voice-wave .bar:nth-child(3) { animation-delay: 0.2s; }
+	.bruno-voice-wave .bar:nth-child(4) { animation-delay: 0.3s; }
+	.bruno-voice-wave .bar:nth-child(5) { animation-delay: 0.4s; }
 </style>
 
 <!-- Hidden container for audio elements from the agent -->
 <div bind:this={audioContainer} class="hidden"></div>
 
-<div class="min-h-full flex flex-col items-center justify-center px-4 py-12 bg-surface-300">
+<div class="min-h-full flex flex-col items-center justify-center px-4 py-12 mise-gradient-bg">
 	{#if connectionState === 'connected'}
 		<!-- Connected state: Show Bruno -->
 		<div class="bruno-container text-center space-y-3">
 			<div class="relative w-64 mx-auto">
-				<!-- Standing Bruno (shown when not speaking or during toggle) -->
+				<!-- Thinking Bruno (shown when thinking or using tool) -->
+				<img
+					src="{base}/bruno/thinking.svg"
+					alt="Bruno the raccoon chef thinking"
+					class="w-full h-auto drop-shadow-xl transition-opacity duration-500 ease-in-out"
+					class:opacity-100={showThinking}
+					class:opacity-0={!showThinking}
+				/>
+				<!-- Standing Bruno (shown when idle/listening) -->
 				<img
 					src="{base}/bruno/standing.svg"
 					alt="Bruno the raccoon chef"
-					class="w-full h-auto drop-shadow-xl transition-opacity duration-100"
-					class:opacity-0={showWinking}
-					class:opacity-100={!showWinking}
-					class:bruno-standing={agentState !== 'speaking'}
+					class="absolute inset-0 w-full h-auto drop-shadow-xl transition-opacity duration-300 ease-in-out"
+					class:opacity-100={!showThinking && agentState !== 'speaking'}
+					class:opacity-0={showThinking || agentState === 'speaking'}
+					class:bruno-standing={!showThinking && agentState !== 'speaking'}
 				/>
-				<!-- Bruno with mouth open (shown during speaking toggle) -->
+				<!-- Bruno with mouth open (shown when speaking) -->
 				<img
 					src="{base}/bruno/standing-mouth-open.svg"
 					alt="Bruno the raccoon chef talking"
-					class="absolute inset-0 w-full h-auto drop-shadow-xl transition-opacity duration-100"
-					class:opacity-100={showWinking}
-					class:opacity-0={!showWinking}
+					class="absolute inset-0 w-full h-auto drop-shadow-xl transition-opacity duration-300 ease-in-out"
+					class:opacity-100={!showThinking && agentState === 'speaking'}
+					class:opacity-0={showThinking || agentState !== 'speaking'}
 				/>
 			</div>
 			<h1 class="text-2xl font-black tracking-tighter text-surface-700 lowercase">
-				{#if agentState === 'speaking'}
+				{#if showThinking}
+					{#if isUsingTool}
+						bruno is using a tool...
+					{:else}
+						bruno is thinking...
+					{/if}
+				{:else if agentState === 'speaking'}
 					bruno is cooking up an answer...
-				{:else if agentState === 'thinking'}
-					bruno is thinking...
 				{:else}
 					bruno is ready to help!
 				{/if}
 			</h1>
 			<p class="text-base font-medium tracking-tighter text-surface-500 lowercase max-w-md">
-				{#if agentState === 'speaking'}
+				{#if showThinking}
+					{#if currentToolName}
+						using: {currentToolName}
+					{:else}
+						preparing something special...
+					{/if}
+				{:else if agentState === 'speaking'}
 					listen to bruno's advice!
 				{:else}
 					your ai sous chef is listening. ask me anything about cooking!
 				{/if}
 			</p>
+
+			<!-- Tool usage indicator -->
+			{#if showThinking}
+				<div class="flex justify-center">
+					<div class="tool-indicator">
+						<div class="tool-spinner"></div>
+						<span class="text-sm font-semibold tracking-tighter text-secondary-600 lowercase">
+							{currentToolName || 'thinking...'}
+						</span>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Bruno speaking indicator -->
+			{#if agentState === 'speaking' && !showThinking}
+				<div class="flex justify-center">
+					<div class="bruno-speaking-indicator">
+						<div class="bruno-voice-wave">
+							<div class="bar"></div>
+							<div class="bar"></div>
+							<div class="bar"></div>
+							<div class="bar"></div>
+							<div class="bar"></div>
+						</div>
+						<span class="text-sm font-semibold tracking-tighter text-tertiary-600 lowercase">bruno is speaking...</span>
+					</div>
+				</div>
+			{/if}
 
 			<!-- Voice indicator when user is speaking -->
 			{#if userIsSpeaking}

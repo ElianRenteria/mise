@@ -24,7 +24,7 @@
 	}
 </script>
 
-<div class="min-h-full overflow-y-auto flex items-center justify-center px-4 py-6 bg-surface-300">
+<div class="min-h-full overflow-y-auto flex items-center justify-center px-4 py-6 mise-gradient-bg">
 	<div class="w-full max-w-md">
 		<!-- login card -->
 		<div class="mise-card">

@@ -72,3 +72,40 @@ a {
 .mise-link {
 	@apply text-primary-500 hover:text-primary-600 font-medium tracking-tighter lowercase;
 }
+
+/* Animated gradient background - warm jazzy waves */
+.mise-gradient-bg {
+	background:
+		radial-gradient(ellipse at 0% 0%, rgba(212, 94, 51, 0.15) 0%, transparent 50%),
+		radial-gradient(ellipse at 100% 0%, rgba(249, 176, 150, 0.2) 0%, transparent 50%),
+		radial-gradient(ellipse at 100% 100%, rgba(212, 94, 51, 0.12) 0%, transparent 50%),
+		radial-gradient(ellipse at 0% 100%, rgba(231, 196, 184, 0.25) 0%, transparent 50%),
+		linear-gradient(135deg, #d1cbc3 0%, #e7e3df 25%, #f0e6df 50%, #e8d4c8 75%, #d1cbc3 100%);
+	background-size: 200% 200%, 200% 200%, 200% 200%, 200% 200%, 100% 100%;
+	animation:
+		wave1 12s ease-in-out infinite,
+		wave2 15s ease-in-out infinite reverse,
+		wave3 18s ease-in-out infinite,
+		wave4 10s ease-in-out infinite reverse;
+}
+
+@keyframes wave1 {
+	0%, 100% { background-position: 0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%; }
+	50% { background-position: 100% 100%, 0% 100%, 0% 0%, 100% 0%, 0% 0%; }
+}
+
+@keyframes wave2 {
+	0%, 100% { background-position: 50% 0%, 50% 100%, 100% 50%, 0% 50%, 0% 0%; }
+	50% { background-position: 50% 100%, 50% 0%, 0% 50%, 100% 50%, 0% 0%; }
+}
+
+@keyframes wave3 {
+	0%, 100% { background-position: 0% 50%, 100% 50%, 50% 0%, 50% 100%, 0% 0%; }
+	33% { background-position: 100% 0%, 0% 100%, 100% 100%, 0% 0%, 0% 0%; }
+	66% { background-position: 100% 100%, 0% 0%, 0% 100%, 100% 0%, 0% 0%; }
+}
+
+@keyframes wave4 {
+	0%, 100% { background-position: 25% 25%, 75% 25%, 75% 75%, 25% 75%, 0% 0%; }
+	50% { background-position: 75% 75%, 25% 75%, 25% 25%, 75% 25%, 0% 0%; }
+}
