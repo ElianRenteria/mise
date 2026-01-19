@@ -1,0 +1,7 @@
+livekit-agents>=0.12.0
+livekit-plugins-silero
+livekit-plugins-xai
+livekit-plugins-noise-cancellation
+livekit-plugins-turn-detector
+aiohttp
+python-dotenv
