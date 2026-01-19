@@ -166,26 +166,18 @@
 					{session.status === 'in_progress' ? 'in progress' : session.status}
 				</span>
 			</div>
-			<div class="flex items-center gap-2">
-				{#if onContinue && transcript.length > 0}
-					<button
-						onclick={() => { onContinue(session); onClose(); }}
-						class="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white font-bold tracking-tighter lowercase rounded-xl transition-colors flex items-center gap-2"
-					>
-						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-						</svg>
-						continue
-					</button>
-				{/if}
+			{#if onContinue && transcript.length > 0}
 				<button
-					onclick={onClose}
-					class="px-4 py-2 bg-surface-200 hover:bg-surface-300 text-surface-600 font-bold tracking-tighter lowercase rounded-xl transition-colors"
+					onclick={() => { onContinue(session); onClose(); }}
+					class="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white font-bold tracking-tighter lowercase rounded-xl transition-colors flex items-center gap-2"
 				>
-					close
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+					</svg>
+					continue
 				</button>
-			</div>
+			{/if}
 		</div>
 	</div>
 </div>

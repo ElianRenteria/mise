@@ -30,8 +30,8 @@
 			<!-- mise branding -->
 			<div class="flex flex-col items-center mb-6">
 				<img
-					src="{base}/bruno/head.svg"
-					alt="Bruno the raccoon"
+					src="{base}/bruno/thinking.svg"
+					alt="Bruno the raccoon thinking"
 					class="w-52 h-52 md:w-60 md:h-60 -mb-4"
 					style="filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.25)) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.2)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.15));"
 				/>

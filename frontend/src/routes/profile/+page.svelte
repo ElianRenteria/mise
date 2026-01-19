@@ -22,10 +22,6 @@
 	let error = $state('');
 	let success = $state('');
 
-	// Input fields for adding new items
-	let newDietary = $state('');
-	let newDisliked = $state('');
-	let newCuisine = $state('');
 
 	onMount(async () => {
 		if (!pb.authStore.isValid || !pb.authStore.record) {
@@ -117,23 +113,8 @@
 		}
 	}
 
-	function addItem(list: string[], item: string, clearFn: () => void) {
-		const trimmed = item.trim().toLowerCase();
-		if (trimmed && !list.includes(trimmed)) {
-			list.push(trimmed);
-			clearFn();
-		}
-	}
-
 	function removeItem(list: string[], item: string): string[] {
 		return list.filter(i => i !== item);
-	}
-
-	function handleKeydown(e: KeyboardEvent, list: string[], inputValue: string, clearFn: () => void) {
-		if (e.key === 'Enter') {
-			e.preventDefault();
-			addItem(list, inputValue, clearFn);
-		}
 	}
 </script>
 
@@ -233,119 +214,86 @@
 						cooking preferences
 					</h2>
 					<p class="text-sm text-surface-500 tracking-tighter lowercase mb-4">
-						bruno learns these as you cook, but you can edit them here
+						bruno learns these as you cook together. you can remove any that aren't right.
 					</p>
 
 					<div class="space-y-6">
 						<!-- Dietary Restrictions -->
 						<div>
 							<label class="mise-label">dietary restrictions</label>
-							<div class="flex flex-wrap gap-2 mb-2">
-								{#each dietaryRestrictions as item}
-									<span class="inline-flex items-center gap-1 px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm font-medium tracking-tighter lowercase">
-										{item}
-										<button
-											type="button"
-											onclick={() => dietaryRestrictions = removeItem(dietaryRestrictions, item)}
-											class="hover:text-primary-900"
-										>
-											<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-											</svg>
-										</button>
-									</span>
-								{/each}
-							</div>
-							<div class="flex gap-2">
-								<input
-									type="text"
-									bind:value={newDietary}
-									placeholder="e.g., vegetarian, gluten-free"
-									class="mise-input flex-1"
-									onkeydown={(e) => handleKeydown(e, dietaryRestrictions, newDietary, () => newDietary = '')}
-								/>
-								<button
-									type="button"
-									onclick={() => addItem(dietaryRestrictions, newDietary, () => newDietary = '')}
-									class="px-4 py-2 bg-surface-200 hover:bg-surface-300 text-surface-700 font-bold tracking-tighter lowercase rounded-xl transition-colors"
-								>
-									add
-								</button>
-							</div>
+							{#if dietaryRestrictions.length > 0}
+								<div class="flex flex-wrap gap-2">
+									{#each dietaryRestrictions as item}
+										<span class="inline-flex items-center gap-1 px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm font-medium tracking-tighter lowercase">
+											{item}
+											<button
+												type="button"
+												onclick={() => dietaryRestrictions = removeItem(dietaryRestrictions, item)}
+												class="hover:text-primary-900"
+												aria-label="Remove {item}"
+											>
+												<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+												</svg>
+											</button>
+										</span>
+									{/each}
+								</div>
+							{:else}
+								<p class="text-sm text-surface-400 italic">none yet — tell bruno about any dietary needs while cooking</p>
+							{/if}
 						</div>
 
 						<!-- Disliked Ingredients -->
 						<div>
 							<label class="mise-label">disliked ingredients</label>
-							<div class="flex flex-wrap gap-2 mb-2">
-								{#each dislikedIngredients as item}
-									<span class="inline-flex items-center gap-1 px-3 py-1 bg-error-100 text-error-700 rounded-full text-sm font-medium tracking-tighter lowercase">
-										{item}
-										<button
-											type="button"
-											onclick={() => dislikedIngredients = removeItem(dislikedIngredients, item)}
-											class="hover:text-error-900"
-										>
-											<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-											</svg>
-										</button>
-									</span>
-								{/each}
-							</div>
-							<div class="flex gap-2">
-								<input
-									type="text"
-									bind:value={newDisliked}
-									placeholder="e.g., cilantro, olives"
-									class="mise-input flex-1"
-									onkeydown={(e) => handleKeydown(e, dislikedIngredients, newDisliked, () => newDisliked = '')}
-								/>
-								<button
-									type="button"
-									onclick={() => addItem(dislikedIngredients, newDisliked, () => newDisliked = '')}
-									class="px-4 py-2 bg-surface-200 hover:bg-surface-300 text-surface-700 font-bold tracking-tighter lowercase rounded-xl transition-colors"
-								>
-									add
-								</button>
-							</div>
+							{#if dislikedIngredients.length > 0}
+								<div class="flex flex-wrap gap-2">
+									{#each dislikedIngredients as item}
+										<span class="inline-flex items-center gap-1 px-3 py-1 bg-error-100 text-error-700 rounded-full text-sm font-medium tracking-tighter lowercase">
+											{item}
+											<button
+												type="button"
+												onclick={() => dislikedIngredients = removeItem(dislikedIngredients, item)}
+												class="hover:text-error-900"
+												aria-label="Remove {item}"
+											>
+												<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+												</svg>
+											</button>
+										</span>
+									{/each}
+								</div>
+							{:else}
+								<p class="text-sm text-surface-400 italic">none yet — mention ingredients you don't like to bruno</p>
+							{/if}
 						</div>
 
 						<!-- Favorite Cuisines -->
 						<div>
 							<label class="mise-label">favorite cuisines</label>
-							<div class="flex flex-wrap gap-2 mb-2">
-								{#each favoriteCuisines as item}
-									<span class="inline-flex items-center gap-1 px-3 py-1 bg-success-100 text-success-700 rounded-full text-sm font-medium tracking-tighter lowercase">
-										{item}
-										<button
-											type="button"
-											onclick={() => favoriteCuisines = removeItem(favoriteCuisines, item)}
-											class="hover:text-success-900"
-										>
-											<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-											</svg>
-										</button>
-									</span>
-								{/each}
-							</div>
-							<div class="flex gap-2">
-								<input
-									type="text"
-									bind:value={newCuisine}
-									placeholder="e.g., italian, mexican, thai"
-									class="mise-input flex-1"
-									onkeydown={(e) => handleKeydown(e, favoriteCuisines, newCuisine, () => newCuisine = '')}
-								/>
-								<button
-									type="button"
-									onclick={() => addItem(favoriteCuisines, newCuisine, () => newCuisine = '')}
-									class="px-4 py-2 bg-surface-200 hover:bg-surface-300 text-surface-700 font-bold tracking-tighter lowercase rounded-xl transition-colors"
-								>
-									add
-								</button>
-							</div>
+							{#if favoriteCuisines.length > 0}
+								<div class="flex flex-wrap gap-2">
+									{#each favoriteCuisines as item}
+										<span class="inline-flex items-center gap-1 px-3 py-1 bg-success-100 text-success-700 rounded-full text-sm font-medium tracking-tighter lowercase">
+											{item}
+											<button
+												type="button"
+												onclick={() => favoriteCuisines = removeItem(favoriteCuisines, item)}
+												class="hover:text-success-900"
+												aria-label="Remove {item}"
+											>
+												<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+												</svg>
+											</button>
+										</span>
+									{/each}
+								</div>
+							{:else}
+								<p class="text-sm text-surface-400 italic">none yet — share your favorite cuisines with bruno</p>
+							{/if}
 						</div>
 
 						<!-- Notes -->
@@ -354,10 +302,12 @@
 							<textarea
 								id="notes"
 								bind:value={notes}
-								placeholder="e.g., cooking skill level, time constraints, kitchen equipment..."
+								placeholder="bruno will add notes here about your cooking style..."
 								rows="3"
 								class="mise-input resize-none"
+								disabled
 							></textarea>
+							<p class="text-xs text-surface-400 mt-1 tracking-tighter">notes are managed by bruno based on your conversations</p>
 						</div>
 					</div>
 				</div>

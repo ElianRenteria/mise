@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { pb, type CookingSession, type TranscriptMessage, type UserPreferences } from '$lib/pocketbase';
-	import { Room, RoomEvent, ConnectionState, TokenSource, Track, ParticipantKind, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant, type Participant, type TranscriptionSegment } from 'livekit-client';
+	import { Room, RoomEvent, ConnectionState, TokenSource, Track, ParticipantKind, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant, type Participant, type TranscriptionSegment, type RpcInvocationData } from 'livekit-client';
 	import { onDestroy, onMount } from 'svelte';
 	import SessionSidebar from '$lib/components/SessionSidebar.svelte';
 	import TranscriptView from '$lib/components/TranscriptView.svelte';
@@ -557,7 +557,43 @@
 		}
 	}
 
-	// Handle the update_user_preferences client tool call
+	// Handle RPC call for updating user preferences from agent
+	async function handleUpdatePreferencesRpc(params: Record<string, string | null>) {
+		console.log('Processing preference update:', params);
+
+		// Parse comma-separated strings into arrays
+		const parsedPreferences: Partial<UserPreferences> = {};
+
+		if (params.dietary_restrictions) {
+			parsedPreferences.dietary_restrictions = params.dietary_restrictions
+				.split(',')
+				.map(s => s.trim().toLowerCase())
+				.filter(s => s);
+		}
+		if (params.disliked_ingredients) {
+			parsedPreferences.disliked_ingredients = params.disliked_ingredients
+				.split(',')
+				.map(s => s.trim().toLowerCase())
+				.filter(s => s);
+		}
+		if (params.favorite_cuisines) {
+			parsedPreferences.favorite_cuisines = params.favorite_cuisines
+				.split(',')
+				.map(s => s.trim().toLowerCase())
+				.filter(s => s);
+		}
+		if (params.notes) {
+			parsedPreferences.notes = params.notes.trim();
+		}
+
+		// Only update if there's something to update
+		if (Object.keys(parsedPreferences).length > 0) {
+			await updateUserPreferences(parsedPreferences);
+			console.log('Preferences updated via RPC:', parsedPreferences);
+		}
+	}
+
+	// Handle the update_user_preferences client tool call (legacy data channel method)
 	// Params come as comma-separated strings from the agent
 	async function handleUpdatePreferencesTool(
 		params: Record<string, string>,
@@ -707,16 +743,43 @@
 	async function sendPreferencesToAgent() {
 		if (!room) return;
 
-		const userId = pb.authStore.record?.id;
+		const user = pb.authStore.record;
+		const userId = user?.id;
+		const userName = user?.name || '';
+
+		// Build a human-readable summary for the agent
+		const prefs = userPreferences || {
+			dietary_restrictions: [],
+			disliked_ingredients: [],
+			favorite_cuisines: [],
+			notes: ''
+		};
+
+		let contextSummary = '';
+		if (userName) {
+			contextSummary += `The user's name is ${userName}. `;
+		}
+		if (prefs.dietary_restrictions?.length) {
+			contextSummary += `They have the following dietary restrictions: ${prefs.dietary_restrictions.join(', ')}. `;
+		}
+		if (prefs.disliked_ingredients?.length) {
+			contextSummary += `They dislike these ingredients: ${prefs.disliked_ingredients.join(', ')}. `;
+		}
+		if (prefs.favorite_cuisines?.length) {
+			contextSummary += `Their favorite cuisines are: ${prefs.favorite_cuisines.join(', ')}. `;
+		}
+		if (prefs.notes) {
+			contextSummary += `Additional notes: ${prefs.notes}. `;
+		}
+
 		const contextMessage = {
 			type: 'user_context',
 			user_id: userId,
-			preferences: userPreferences || {
-				dietary_restrictions: [],
-				disliked_ingredients: [],
-				favorite_cuisines: [],
-				notes: ''
-			}
+			user_name: userName,
+			preferences: prefs,
+			context_summary: contextSummary.trim() || 'No preferences recorded yet.',
+			// Instruct agent to remember preferences
+			instructions: 'Use this context to personalize recommendations. When the user mentions dietary restrictions, dislikes, or favorite cuisines, call the update_user_preferences tool to save them for future sessions.'
 		};
 
 		try {
@@ -881,6 +944,19 @@
 
 			// Listen for transcription from LiveKit (speech-to-text)
 			room.on(RoomEvent.TranscriptionReceived, handleTranscription);
+
+			// Register RPC handler for preference updates from agent
+			room.localParticipant.registerRpcMethod('update_user_preferences', async (data: RpcInvocationData) => {
+				console.log('RPC received: update_user_preferences', data.payload);
+				try {
+					const params = JSON.parse(data.payload);
+					await handleUpdatePreferencesRpc(params);
+					return JSON.stringify({ success: true, message: 'Preferences updated successfully' });
+				} catch (err) {
+					console.error('Failed to handle preference update RPC:', err);
+					return JSON.stringify({ success: false, error: 'Failed to update preferences' });
+				}
+			});
 
 			await room.connect(serverUrl, participantToken);
 
