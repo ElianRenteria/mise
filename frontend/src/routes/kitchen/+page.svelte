@@ -6,6 +6,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import SessionSidebar from '$lib/components/SessionSidebar.svelte';
 	import TranscriptView from '$lib/components/TranscriptView.svelte';
+	import ShoppingListModal from '$lib/components/ShoppingListModal.svelte';
 
 	// Auth check and initial data load
 	onMount(async () => {
@@ -53,6 +54,10 @@
 
 	// Microphone mute state
 	let isMuted: boolean = $state(false);
+
+	// Shopping list state
+	let showShoppingList: boolean = $state(false);
+	let shoppingListData: { recipeName: string; items: string[] } | null = $state(null);
 
 	// Tool usage tracking
 	let isUsingTool: boolean = $state(false);
@@ -1410,6 +1415,32 @@
 				}
 			});
 
+			// Register RPC handler for sending shopping list to user
+			room.localParticipant.registerRpcMethod('send_shopping_list', async (data: RpcInvocationData) => {
+				console.log('RPC received: send_shopping_list', data.payload);
+				try {
+					const params = JSON.parse(data.payload);
+
+					// Validate required fields
+					if (!params.recipe_name || !params.items || !Array.isArray(params.items)) {
+						throw new Error('recipe_name and items array are required');
+					}
+
+					// Store the shopping list data and show the modal
+					shoppingListData = {
+						recipeName: params.recipe_name,
+						items: params.items
+					};
+					showShoppingList = true;
+
+					console.log('Showing shopping list:', shoppingListData);
+					return JSON.stringify({ success: true, message: 'Shopping list displayed to user' });
+				} catch (err) {
+					console.error('Failed to send shopping list RPC:', err);
+					return JSON.stringify({ success: false, error: 'Failed to display shopping list' });
+				}
+			});
+
 			await room.connect(serverUrl, participantToken);
 
 			// Enable microphone for voice interaction (requires HTTPS on mobile)
@@ -1767,6 +1798,15 @@
 		session={viewingSession}
 		onClose={() => viewingSession = null}
 		onContinue={continueSession}
+	/>
+{/if}
+
+<!-- Shopping List Modal -->
+{#if showShoppingList && shoppingListData}
+	<ShoppingListModal
+		recipeName={shoppingListData.recipeName}
+		items={shoppingListData.items}
+		onClose={() => { showShoppingList = false; shoppingListData = null; }}
 	/>
 {/if}
 

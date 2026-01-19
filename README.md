@@ -37,6 +37,9 @@ loved a recipe? save it to your favorites and make it again anytime. rate your d
 ### kitchen history
 every cooking session is saved. look back at what you've made, when you made it, and how it went.
 
+### shopping lists
+planning ahead? tell Bruno what you want to make, check off what you already have, and he'll create a shopping list of what's missing. share it however you like — copy it, text it, or email it to yourself.
+
 ---
 
 ## use cases
@@ -55,6 +58,9 @@ fully voice-controlled for users who have difficulty with touchscreens or prefer
 
 **meal planning**
 check your favorites, see what you've made recently, and decide what to cook based on your history.
+
+**grocery shopping**
+start with a recipe instead of ingredients. tell Bruno what you want to make, let him know what you already have, and he'll generate a shopping list of what you're missing. go to the store, come back, and pick up right where you left off — Bruno remembers and starts guiding you through the recipe.
 
 ---
 
@@ -79,6 +85,65 @@ preferences, history, favorites, session state — mise remembers so you don't h
 
 **meet people where they are**
 whether you're a beginner or experienced cook, whether you have a full pantry or three random ingredients, mise adapts.
+
+---
+
+## why it's built this way
+
+**mobile-first, not mobile-friendly**
+nobody brings a laptop into the kitchen. mise is a web app, but it's designed for your phone propped up on the counter. the interface is big, simple, and touch-friendly — but you shouldn't need to touch it at all.
+
+**voice as the primary interface**
+if the whole point is hands-free cooking, why build around a screen? mise only needs a microphone and a speaker. the visual UI is there for quick glances — seeing Bruno's state, viewing your shopping list — but everything important happens through conversation.
+
+**web, not native**
+a web app means no app store friction. open a link and start cooking. it works on any device with a browser and a mic. progressive web apps have come far enough that the experience feels native without the download.
+
+**ai that gets out of the way**
+Bruno isn't trying to impress you with how smart he is. he's trying to help you cook dinner. that means short responses, clear instructions, and knowing when to shut up and let you work.
+
+**session persistence as a feature**
+real cooking isn't one continuous session. you might plan a recipe, go shopping, come back hours later, get interrupted, continue the next day. mise treats this as normal, not an edge case.
+
+---
+
+## technical decisions
+
+mise was built in one day. that constraint shaped every technical choice — keep the scope small, make sure the core works, ship something usable.
+
+**livekit cloud instead of custom agents**
+the "proper" setup would be deepgram for speech-to-text, elevenlabs for voice, a custom agent running in docker on google cloud run, and an mcp server wrapping all the tools. instead, i used livekit cloud with built-in voice pipeline and simple tool definitions. less control, but it works out of the box and let me focus on the product instead of infrastructure.
+
+**pocketbase for everything**
+setting up postgres or firebase would have taken hours. pocketbase gives you auth, database, and file storage in a single binary. it runs in docker behind nginx on my home server — no cloud costs, no provisioning, just works. the scale of this project is tiny, so the tradeoff makes sense.
+
+**mailgun for email**
+verification emails and password resets go through mailgun. i had plans to use it for more (recipe summaries, shopping lists via email) but ran out of time.
+
+**spoonacular for recipes**
+spoonacular has the most detailed recipe data i found — ingredients, steps, equipment, timing, nutritional info. i only scratched the surface of what their api offers. there are more tools i wanted to build but didn't get to.
+
+**home lab hosting**
+the backend runs on my home server behind nginx. no cloud bills, no scaling concerns for a project this size. if it ever needed to scale, i'd move it — but for now, this is simpler.
+
+---
+
+## what i'd add with more time
+
+**twilio for telephony**
+bruno could text you reminders. set a timer for something in the oven, leave the app, and get a call or text when it's time to check. voice-first should extend beyond the app.
+
+**instacart integration**
+after generating a shopping list, one tap to order everything for delivery. the api exists, just didn't have time to wire it up.
+
+**custom voice agent**
+more control over the voice pipeline — better latency, custom wake words, finer-tuned responses. livekit cloud is great for prototyping but a custom setup would be more flexible.
+
+**mcp server for tools**
+wrapping tools in an mcp server would make it easier to add integrations — smart home devices, calendar, other recipe apis, nutrition tracking.
+
+**more spoonacular tools**
+nutritional info, wine pairings, meal planning, ingredient substitutions — the api supports all of this, i just ran out of time to build the tools.
 
 ---
 
