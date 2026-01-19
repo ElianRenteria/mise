@@ -86,14 +86,6 @@ Phone died mid-recipe? No problem. Rejoin and Bruno will remember exactly where 
 
 Bruno is your resourceful raccoon sous chef who helps you make the most of what you have. Organized, encouraging, and always ready to help you cook something delicious.
 
-## 📄 License
-
-MIT
-
-## 🤝 Contributing
-
-Contributions welcome!
-
 ---
 
 Built with ❤️ by Elian Renteria
