@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { pb, type CookingSession, type TranscriptMessage, type UserPreferences } from '$lib/pocketbase';
-	import { Room, RoomEvent, ConnectionState, TokenSource, Track, ParticipantKind, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant, type Participant, type TranscriptionSegment, type RpcInvocationData } from 'livekit-client';
+	import { Room, RoomEvent, ConnectionState, TokenSource, Track, ParticipantKind, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant, type Participant, type TranscriptionSegment, type RpcInvocationData, RoomOptions } from 'livekit-client';
 	import { onDestroy, onMount } from 'svelte';
 	import SessionSidebar from '$lib/components/SessionSidebar.svelte';
 	import TranscriptView from '$lib/components/TranscriptView.svelte';
@@ -901,7 +901,10 @@
 
 	// Send preferences and context to the agent via data message
 	async function sendPreferencesToAgent() {
-		if (!room) return;
+		if (!room) {
+			console.warn('Cannot send preferences: no room');
+			return;
+		}
 
 		const user = pb.authStore.record;
 		const userId = user?.id;
@@ -940,14 +943,44 @@
 			preferences: prefs,
 			context_summary: contextSummary.trim() || 'No preferences recorded yet.',
 			// Instruct agent to remember preferences
-			instructions: 'Use this context to personalize recommendations. When the user mentions dietary restrictions, dislikes, or favorite cuisines, call the update_user_preferences tool to save them for future sessions.'
+			instructions: 'IMPORTANT: Use this context to personalize your responses. Greet the user by name. Remember their dietary restrictions, disliked ingredients, and favorite cuisines when suggesting recipes. When the user mentions new dietary restrictions, dislikes, or favorite cuisines, call the update_user_preferences tool to save them for future sessions.'
 		};
+
+		console.log('Preparing to send user context:', {
+			userName,
+			hasPreferences: !!userPreferences,
+			dietary_restrictions: prefs.dietary_restrictions,
+			disliked_ingredients: prefs.disliked_ingredients,
+			favorite_cuisines: prefs.favorite_cuisines,
+			contextSummary
+		});
 
 		try {
 			const encoder = new TextEncoder();
 			const data = encoder.encode(JSON.stringify(contextMessage));
+
+			// Find agent participants to target specifically
+			const agentParticipants: string[] = [];
+			for (const [, participant] of room.remoteParticipants) {
+				if (participant.kind === ParticipantKind.AGENT) {
+					agentParticipants.push(participant.identity);
+				}
+			}
+
+			// Send to all participants (broadcast)
 			await room.localParticipant.publishData(data, { reliable: true });
-			console.log('Sent user context to agent:', contextMessage);
+			console.log('Broadcast user context to all participants');
+
+			// Also send targeted to agent participants if found
+			if (agentParticipants.length > 0) {
+				await room.localParticipant.publishData(data, {
+					reliable: true,
+					destinationIdentities: agentParticipants
+				});
+				console.log('Sent targeted user context to agents:', agentParticipants);
+			}
+
+			console.log('Successfully sent user context to agent');
 		} catch (err) {
 			console.error('Failed to send context:', err);
 		}
@@ -1052,17 +1085,90 @@
 				agentName: 'Bruno'
 			});
 
+			// Build user context metadata to pass to agent
+			const user = pb.authStore.record;
+			const userNameForContext = user?.name?.split(' ')[0] || '';
+			const prefs = userPreferences || {
+				dietary_restrictions: [],
+				disliked_ingredients: [],
+				favorite_cuisines: [],
+				notes: ''
+			};
+
+			// Build context summary
+			let contextSummary = '';
+			if (userNameForContext) {
+				contextSummary += `The user's name is ${userNameForContext}. `;
+			}
+			if (prefs.dietary_restrictions?.length) {
+				contextSummary += `They have dietary restrictions: ${prefs.dietary_restrictions.join(', ')}. `;
+			}
+			if (prefs.disliked_ingredients?.length) {
+				contextSummary += `They dislike: ${prefs.disliked_ingredients.join(', ')}. `;
+			}
+			if (prefs.favorite_cuisines?.length) {
+				contextSummary += `Their favorite cuisines: ${prefs.favorite_cuisines.join(', ')}. `;
+			}
+			if (prefs.notes) {
+				contextSummary += `Notes: ${prefs.notes}. `;
+			}
+
+			const userContextMetadata = JSON.stringify({
+				type: 'user_context',
+				user_name: userNameForContext,
+				preferences: prefs,
+				context_summary: contextSummary.trim() || 'No preferences recorded yet.'
+			});
+
 			// Create and connect to room
 			room = new Room();
+
+			// Track if we've sent context to the agent
+			let contextSentToAgent = false;
+
+			// Function to send context when agent is ready
+			const sendContextToAgent = async () => {
+				if (contextSentToAgent) return;
+				contextSentToAgent = true;
+
+				if (continuingSession) {
+					await sendSessionContext();
+				}
+				// Send preferences via data channel
+				await sendPreferencesToAgent();
+				// Send again after a short delay to ensure delivery
+				setTimeout(async () => {
+					await sendPreferencesToAgent();
+				}, 2000);
+			};
+
+			// Listen for when the agent joins the room
+			room.on(RoomEvent.ParticipantConnected, async (participant: RemoteParticipant) => {
+				console.log('Participant connected:', participant.identity, 'kind:', participant.kind);
+				if (participant.kind === ParticipantKind.AGENT) {
+					console.log('Agent joined! Sending user context...');
+					// Give agent a moment to initialize, then send context
+					setTimeout(async () => {
+						await sendContextToAgent();
+					}, 500);
+				}
+			});
 
 			room.on(RoomEvent.Connected, async () => {
 				console.log('Room connected!');
 				connectionState = 'connected';
 
+				// Set our metadata so agent can read it
+				try {
+					await room!.localParticipant.setMetadata(userContextMetadata);
+					console.log('Set participant metadata with user context');
+				} catch (err) {
+					console.error('Failed to set metadata:', err);
+				}
+
 				if (continuingSession) {
-					// Continuing an existing session - send context immediately
+					// Continuing an existing session
 					console.log('Continuing session:', continuingSession.id);
-					await sendSessionContext();
 
 					// Update session status back to in_progress
 					try {
@@ -1075,18 +1181,32 @@
 				} else {
 					// Create a new cooking session
 					console.log('Attempting to create session...');
-				try {
-					currentSessionId = await createSession();
-					console.log('Session creation result:', currentSessionId);
-				} catch (err) {
-					console.error('Session creation threw error:', err);
-				}
+					try {
+						currentSessionId = await createSession();
+						console.log('Session creation result:', currentSessionId);
+					} catch (err) {
+						console.error('Session creation threw error:', err);
+					}
 				}
 
-				// Send user preferences to the agent after a short delay to ensure agent is ready
+				// Check if agent is already in the room
+				for (const participant of room!.remoteParticipants.values()) {
+					if (participant.kind === ParticipantKind.AGENT) {
+						console.log('Agent already in room, sending context...');
+						setTimeout(async () => {
+							await sendContextToAgent();
+						}, 500);
+						break;
+					}
+				}
+
+				// Fallback: send context after delay even if we didn't detect agent
 				setTimeout(async () => {
-					await sendPreferencesToAgent();
-				}, 1000);
+					if (!contextSentToAgent) {
+						console.log('Fallback: sending context after timeout');
+						await sendContextToAgent();
+					}
+				}, 3000);
 			});
 
 			room.on(RoomEvent.Disconnected, async () => {
@@ -1171,6 +1291,122 @@
 				} catch (err) {
 					console.error('Failed to get favorites RPC:', err);
 					return JSON.stringify({ success: false, error: 'Failed to get favorites', favorites: [] });
+				}
+			});
+
+			// Register RPC handler for getting user context (name, preferences)
+			// Bruno should call this at the START of every conversation
+			room.localParticipant.registerRpcMethod('get_user_context', async (data: RpcInvocationData) => {
+				console.log('RPC received: get_user_context');
+				try {
+					const user = pb.authStore.record;
+					const userName = user?.name?.split(' ')[0] || '';
+
+					// Make sure we have the latest preferences
+					if (!userPreferences) {
+						userPreferences = await loadUserPreferences();
+					}
+
+					const prefs = userPreferences || {
+						dietary_restrictions: [],
+						disliked_ingredients: [],
+						favorite_cuisines: [],
+						notes: ''
+					};
+
+					// Build context summary
+					let contextSummary = '';
+					if (userName) {
+						contextSummary += `The user's name is ${userName}. `;
+					}
+					if (prefs.dietary_restrictions?.length) {
+						contextSummary += `They have dietary restrictions: ${prefs.dietary_restrictions.join(', ')}. `;
+					}
+					if (prefs.disliked_ingredients?.length) {
+						contextSummary += `They dislike these ingredients: ${prefs.disliked_ingredients.join(', ')}. `;
+					}
+					if (prefs.favorite_cuisines?.length) {
+						contextSummary += `Their favorite cuisines are: ${prefs.favorite_cuisines.join(', ')}. `;
+					}
+					if (prefs.notes) {
+						contextSummary += `Notes: ${prefs.notes}. `;
+					}
+
+					const result = {
+						success: true,
+						user_name: userName,
+						preferences: {
+							dietary_restrictions: prefs.dietary_restrictions || [],
+							disliked_ingredients: prefs.disliked_ingredients || [],
+							favorite_cuisines: prefs.favorite_cuisines || [],
+							notes: prefs.notes || ''
+						},
+						context_summary: contextSummary.trim() || 'No preferences recorded yet.'
+					};
+
+					console.log('Returning user context:', result);
+					return JSON.stringify(result);
+				} catch (err) {
+					console.error('Failed to get user context RPC:', err);
+					return JSON.stringify({ success: false, error: 'Failed to get user context', user_name: '', preferences: {} });
+				}
+			});
+
+			// Register RPC handler for getting session context (for continuations)
+			// Bruno should call this at the START of every conversation to check if resuming
+			room.localParticipant.registerRpcMethod('get_session_context', async (data: RpcInvocationData) => {
+				console.log('RPC received: get_session_context');
+				try {
+					// If not continuing a session, return null
+					if (!continuingSession) {
+						console.log('No session to continue - this is a new conversation');
+						return JSON.stringify({
+							success: true,
+							is_continuation: false,
+							message: 'This is a new conversation, not a continuation.'
+						});
+					}
+
+					// Parse recipe_data if it's a string
+					let recipeData = continuingSession.recipe_data;
+					if (typeof recipeData === 'string') {
+						try {
+							recipeData = JSON.parse(recipeData);
+						} catch {
+							recipeData = null;
+						}
+					}
+
+					// Build transcript summary
+					const transcriptSummary = transcript.map(m =>
+						`${m.role === 'user' ? 'User' : 'Bruno'}: ${m.content}`
+					).join('\n');
+
+					const result = {
+						success: true,
+						is_continuation: true,
+						recipe_name: continuingSession.recipe_name || null,
+						recipe_id: continuingSession.selected_recipe_id || null,
+						recipe_data: recipeData,
+						ingredients: continuingSession.ingredients || [],
+						current_phase: continuingSession.current_phase || 'cooking',
+						current_step: continuingSession.current_step || 1,
+						transcript_summary: transcriptSummary,
+						previous_transcript: transcript,
+						instructions: `You are continuing a cooking session. The user was making "${continuingSession.recipe_name || 'a recipe'}". They were on step ${continuingSession.current_step || 1}. Use the recipe_data to continue guiding them. Do NOT ask what they were cooking - tell them where they left off and continue.`
+					};
+
+					console.log('Returning session context:', {
+						is_continuation: true,
+						recipe_name: result.recipe_name,
+						current_step: result.current_step,
+						has_recipe_data: !!result.recipe_data
+					});
+
+					return JSON.stringify(result);
+				} catch (err) {
+					console.error('Failed to get session context RPC:', err);
+					return JSON.stringify({ success: false, is_continuation: false, error: 'Failed to get session context' });
 				}
 			});
 
