@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  pocketbase:
+    image: elestio/pocketbase:latest
+    container_name: mise-pocketbase
+    restart: unless-stopped
+    volumes:
+      - /home/elianrenteria/mise/pb_data:/pb_data
+      - /home/elianrenteria/mise/pb_public:/pb_public
+    environment:
+      - TZ=America/Los_Angeles
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8090/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - shared-network
+
+# base_url: https://mise.elianrenteria.dev
+# Deployed on Home Server behind Nginx Reverse Proxy "base_url"
+# Visit "base_url/_/" to access the PocketBase admin dashboard

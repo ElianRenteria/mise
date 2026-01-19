@@ -1,0 +1,74 @@
+@import 'tailwindcss';
+
+@import '@skeletonlabs/skeleton';
+@import '@skeletonlabs/skeleton-svelte';
+@import './mise-theme.css';
+
+/* mise brand global styles */
+html,
+body {
+	@apply h-full overflow-hidden;
+}
+
+body {
+	@apply bg-surface-300 text-surface-700;
+	font-family: 'Open Sans', ui-sans-serif, system-ui, sans-serif;
+	letter-spacing: -0.05em;
+}
+
+/* Headings use Black weight (900) */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	font-weight: 900;
+	letter-spacing: -0.05em;
+}
+
+/* Body text uses Medium weight (500) */
+p,
+span,
+div,
+button,
+input,
+label,
+a {
+	font-weight: 500;
+}
+
+/* Button emphasis */
+.btn {
+	font-weight: 900;
+	letter-spacing: -0.05em;
+}
+
+/* Custom mise utilities */
+.mise-heading {
+	@apply text-4xl font-black tracking-tighter lowercase text-surface-700;
+}
+
+.mise-subheading {
+	@apply text-sm font-medium tracking-tighter lowercase text-surface-500;
+}
+
+.mise-card {
+	@apply bg-surface-50 shadow-xl rounded-2xl p-8;
+}
+
+.mise-input {
+	@apply w-full px-4 py-3 rounded-xl border border-surface-400 bg-surface-50 text-surface-700 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+}
+
+.mise-label {
+	@apply block text-sm font-medium tracking-tighter text-surface-700 mb-2;
+}
+
+.mise-btn-primary {
+	@apply w-full h-12 bg-primary-500 hover:bg-primary-600 text-white font-black tracking-tighter lowercase rounded-xl transition-colors;
+}
+
+.mise-link {
+	@apply text-primary-500 hover:text-primary-600 font-medium tracking-tighter lowercase;
+}
