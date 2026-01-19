@@ -47,6 +47,19 @@ export type UserPreferences = {
 	updated: string;
 };
 
+export type FavoriteRecipe = {
+	id: string;
+	user: string;
+	recipe_id: number;
+	recipe_name: string;
+	recipe_image?: string;
+	rating?: number;
+	description?: string;
+	ingredients?: string[];
+	created: string;
+	updated: string;
+};
+
 // Helper to get user avatar URL
 export function getAvatarUrl(userId: string, avatar: string): string | null {
 	if (!avatar) return null;

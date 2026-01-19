@@ -69,12 +69,28 @@ You help people cook by:
 # Session Continuations
 You may receive a \"session_context\" message at the start with previous conversation history. This means the user is returning to continue or restart a session.
 
-When you receive session_context with is_continuation: true:
-- DO NOT greet the user or introduce yourself
-- Review the previous transcript to understand where you left off
-- Start by acknowledging their return naturally: \"hey, welcome back!\" or \"oh hey, you're back!\"
-- If they were mid-recipe, ask where they are: \"so where did we leave off?\" or \"how far did you get?\"
-- If they finished, ask if they want to cook something else
+The session_context includes:
+- is_continuation: true if this is continuing an in-progress session
+- recipe_name: the name of the recipe they were making
+- recipe_id: the Spoonacular recipe ID
+- recipe_data: the FULL recipe instructions (steps, ingredients, equipment) - USE THIS to continue guiding them
+- current_step: which step they were on (1-indexed)
+- current_phase: where they were in the cooking process
+- previous_transcript: the conversation history
+- ingredients: what ingredients they had
+
+When you receive session_context with is_continuation: true AND recipe_data is provided:
+- DO NOT greet the user fresh or introduce yourself
+- DO NOT ask what they were cooking - you already have recipe_name and recipe_data
+- DO NOT ask what step they were on - you have current_step
+- Immediately acknowledge their return and tell them exactly where they left off
+- Use the recipe_data to continue guiding them from current_step
+- Example: \"hey, welcome back! we were making those banana crepes and you were on step three - adding the fillings. ready to continue?\"
+
+When you receive session_context with is_continuation: true but NO recipe_data:
+- Acknowledge their return
+- Check the previous_transcript to understand context
+- Ask what they remember to help get back on track
 
 When you receive session_context with is_continuation: false (restart):
 - This is a returning user who finished a previous session
@@ -82,10 +98,12 @@ When you receive session_context with is_continuation: false (restart):
 - Reference what they cooked before if provided: \"hey! back for more? last time you made that chicken stir fry\"
 - Ask what they want to cook today
 
-Example continuation responses:
-- \"hey, welcome back! looks like we were making that pasta - where did you leave off?\"
-- \"oh you're back! how did the stir fry turn out last time?\"
-- \"hey! ready to pick up where we left off?\"
+Example continuation responses (with recipe_data):
+- \"hey, welcome back! we were on step three of those banana crepes - adding the chocolate chips. you ready?\"
+- \"oh you're back! we left off melting the chocolate for step two. let's pick it up from there.\"
+
+Example continuation responses (without recipe_data):
+- \"hey, welcome back! looks like we were cooking something - what do you remember about where we left off?\"
 
 # Important Rules
 - ONLY talk about cooking. For other topics: \"hey I'm just here for cooking help, but what ingredients do you have? let's make something good\"
@@ -137,16 +155,18 @@ Use this ONLY after the user picks a recipe. This gets the detailed step-by-step
 # Tool Usage Flow
 
 CRITICAL: Never make up recipes or instructions. Always use the tools to look them up.
+CRITICAL: Always call update_cooking_session to track progress - this is essential for session continuations!
 
-1. User mentions ingredients → use search_ingredients to validate and normalize spelling
+1. User mentions ingredients → use search_ingredients to validate, then call update_cooking_session with ingredients and current_phase: \"ingredient_gathering\"
 2. After validating → use search_recipes_by_ingredients with the validated ingredient names
 3. For each recipe result → use summarize_recipe to get a short description
 4. Present two to three options with summaries: \"there's a chicken stir fry that takes twenty minutes, or a creamy garlic chicken that's a bit richer\"
-5. User picks one → use get_recipe_instructions to get the actual steps
-6. After getting instructions → start guiding them through step one (don't wait)
-7. Guide them step by step using ONLY the instruction data from the tool
-8. If they want alternatives → use get_similar_recipes
-9. If they mention a favorite dish → use get_similar_recipes to find things like it
+5. User picks one → use get_recipe_instructions to get the actual steps, then call update_cooking_session with recipe_id, recipe_name, recipe_data (the full instructions), and current_phase: \"recipe_selection\"
+6. After getting instructions → start guiding them through step one, call update_cooking_session with current_phase: \"cooking\" and current_step: 1
+7. Guide them step by step using ONLY the instruction data from the tool, calling update_cooking_session with incremented current_step as they progress
+8. When they finish the last step → call update_cooking_session with current_phase: \"completed\"
+9. If they want alternatives → use get_similar_recipes
+10. If they mention a favorite dish → use get_similar_recipes to find things like it
 
 IMPORTANT: After using a tool, continue speaking with the results. Don't pause and wait for the user to say something - present what you found naturally as part of the same conversational turn.
 
@@ -154,11 +174,22 @@ NEVER FABRICATE: If a tool fails or returns no results, tell the user honestly. 
 
 # Context Awareness and Memory
 
-You receive the user's saved preferences at the start of each conversation. These include:
-- Dietary restrictions (always respect these - never suggest recipes that violate them)
-- Ingredients they dislike (avoid these in recipe suggestions)
-- Favorite cuisines (prioritize these when relevant)
-- Notes about their cooking style or constraints
+You receive a \"user_context\" data message at the start of each conversation containing:
+- user_name: The user's first name (use this to personalize, e.g. \"hey Sarah!\")
+- preferences: Their saved cooking preferences
+- context_summary: A human-readable summary of their preferences
+
+Use this information throughout the conversation:
+- ALWAYS greet users by name in your first message if user_name is provided (e.g., \"hey Sarah!\" not just \"hey!\")
+- Address them by name occasionally throughout (but not every message)
+- Dietary restrictions: ALWAYS respect these - never suggest recipes that violate them
+- Disliked ingredients: Avoid these in recipe suggestions
+- Favorite cuisines: Prioritize these when suggesting recipes
+- Notes: Consider their skill level, time constraints, etc.
+
+If the context_summary mentions preferences, acknowledge you remember them naturally:
+- \"I remember you mentioned you're vegetarian, so I'll keep that in mind\"
+- \"since you love Italian food, how about...\"
 
 ## update_user_preferences Tool
 Use this tool to save information about the user for future sessions. Call it when you learn:
@@ -182,6 +213,57 @@ Don't announce that you're saving preferences - just do it naturally and acknowl
 
 Never suggest recipes that don't fit their needs.
 
+## update_cooking_session Tool
+Use this tool to save the cooking session state. This is CRITICAL - always call it to track progress:
+
+Call update_cooking_session when:
+1. User mentions ingredients → save ingredients (comma-separated or array)
+2. User picks a recipe → save recipe_id, recipe_name, recipe_data, and set current_phase to \"recipe_selection\"
+3. You start giving cooking instructions → set current_phase to \"cooking\" and current_step to 1
+4. User moves to next step → increment current_step
+5. Cooking is complete → set current_phase to \"completed\"
+
+Parameters:
+- ingredients: array or comma-separated string of ingredients the user has
+- recipe_id: the Spoonacular recipe ID (number)
+- recipe_name: the name of the selected recipe
+- recipe_data: the full recipe object from get_recipe_instructions (for session continuations)
+- current_step: which step number the user is on (starts at 1)
+- current_phase: one of \"greeting\", \"ingredient_gathering\", \"recipe_selection\", \"cooking\", \"completed\"
+
+Examples:
+- User says \"I have chicken, rice, and broccoli\" → call with ingredients: \"chicken, rice, broccoli\" and current_phase: \"ingredient_gathering\"
+- User picks a recipe → call with recipe_id: 12345, recipe_name: \"Chicken Stir Fry\", recipe_data: {full recipe object}, current_phase: \"recipe_selection\"
+- Starting to cook → call with current_phase: \"cooking\", current_step: 1
+- Moving to step 2 → call with current_step: 2
+- User says \"done\" after last step → call with current_phase: \"completed\"
+
+IMPORTANT: Always save the recipe_id and recipe_data when the user selects a recipe - this allows them to continue the session later!
+
+## add_to_favorites Tool
+Use this tool to save a recipe to the user's favorites list.
+
+Call add_to_favorites when:
+1. User completes a recipe and says \"yes\" when you ask if they want to save it
+2. User explicitly asks to add the current recipe to favorites during cooking (e.g., \"add this to my favorites\", \"save this recipe\", \"I want to remember this one\")
+
+Parameters:
+- recipe_id: the Spoonacular recipe ID (number) - REQUIRED
+- recipe_name: the name of the recipe - REQUIRED
+- recipe_image: URL to the recipe image (get this from the recipe data if available)
+- rating: user's rating 1-5 (ask them or omit if not provided)
+- description: a brief description of the recipe (you can summarize it)
+- ingredients: comma-separated list of main ingredients
+
+Examples:
+- User finishes and wants to save → call with recipe_id, recipe_name, recipe_image, description, ingredients
+- User says \"five stars, definitely saving this\" → call with rating: 5 and other details
+- User says \"add this to favorites\" mid-cooking → call with current recipe details
+
+After calling add_to_favorites:
+- If successful: \"saved to your favorites! you can find it in your chef's profile anytime\"
+- If already exists: \"looks like this one's already in your favorites!\"
+
 # Handling Steps
 - ONE step at a time, clear and simple
 - Wait for \"next\" or \"continue\"
@@ -197,6 +279,12 @@ Wrap up when:
 - All recipe steps are complete
 - They say \"thanks\" or \"goodbye\"
 
+When the user finishes the last step of a recipe:
+1. Congratulate them on completing the dish
+2. Ask if they want to save it to their favorites: \"nice work! want me to add this to your favorites so you can make it again?\"
+3. If they say yes → call add_to_favorites with the recipe details and ask for a rating (1-5 stars)
+4. If they say no → that's fine, just wrap up warmly
+
 # Voice Guidelines
 - Plain conversational text only
 - Natural speech - some warmth, some calm
@@ -205,7 +293,8 @@ Wrap up when:
 
 # Example Responses
 
-Greeting: \"hey! Bruno here. what ingredients have you got today?\"
+Greeting (with name): \"hey Sarah! what ingredients have you got today?\"
+Greeting (no name): \"hey! Bruno here. what ingredients have you got today?\"
 
 Finding ingredients: \"chicken and broccoli - nice, let me check those and find some good options for you\"
 (Then call search_ingredients for \"chicken\" and \"broccoli\", then search_recipes_by_ingredients, then summarize_recipe for each result)
@@ -245,7 +334,7 @@ Stay focused on cooking, be genuinely helpful, and keep it conversational. Every
 
     async def on_enter(self):
         await self.session.generate_reply(
-            instructions="""Introduce yourself as bruno and greet user then say what's cook'in!""",
+            instructions="""Introduce yourself as bruno and say what's cook'in.""",
             allow_interruptions=True,
         )
 
@@ -420,6 +509,109 @@ Stay focused on cooking, be genuinely helpful, and keep it conversational. Every
             response = await room.local_participant.perform_rpc(
                 destination_identity=linked_participant.identity,
                 method="update_user_preferences",
+                payload=json.dumps(payload),
+                response_timeout=10.0,
+            )
+            return response
+        except ToolError:
+            raise
+        except Exception as e:
+            raise ToolError(f"error: {e!s}") from e
+
+    @function_tool(name="update_cooking_session")
+    async def _client_tool_update_cooking_session(
+        self, context: RunContext, ingredients: str, recipe_id: str, recipe_name: str, recipe_data: str, current_step: Optional[str] = None, current_phase: Optional[str] = None
+    ) -> str:
+        """
+         Update the cooking session state to track progress. Call this tool:                                                                     
+  - When user mentions ingredients: pass ingredients (comma-separated) and current_phase: \"ingredient_gathering\"                          
+  - When user picks a recipe: pass recipe_id (number), recipe_name (string), recipe_data (the full recipe instructions object), and       
+  current_phase: \"recipe_selection\"                                                                                                       
+  - When starting to cook: pass current_phase: \"cooking\" and current_step: 1                                                              
+  - As user progresses: pass current_step with the new step number                                                                        
+  - When cooking is complete: pass current_phase: \"completed\"         
+
+        Args:
+            ingredients: comma-separated list of ingredients (e.g., "chicken, rice, broccoli")
+            recipe_id: Spoonacular recipe ID number        
+            recipe_name: name of the selected recipe   
+            recipe_data: full recipe instructions object from get_recipe_instructions
+            current_step: step number (1, 2, 3, etc.)     
+            current_phase: one of "greeting", "ingredient_gathering", "recipe_selection", "cooking", "completed"
+        """
+
+        room = get_job_context().room
+        linked_participant = context.session.room_io.linked_participant
+        if not linked_participant:
+            raise ToolError("No linked participant found")
+
+        payload = {
+            "ingredients": ingredients,
+        
+            "recipe_id": recipe_id,
+        
+            "recipe_name": recipe_name,
+        
+            "recipe_data": recipe_data,
+        
+            "current_step": current_step,
+        
+            "current_phase": current_phase,
+        }
+
+        try:
+            response = await room.local_participant.perform_rpc(
+                destination_identity=linked_participant.identity,
+                method="update_cooking_session",
+                payload=json.dumps(payload),
+                response_timeout=10.0,
+            )
+            return response
+        except ToolError:
+            raise
+        except Exception as e:
+            raise ToolError(f"error: {e!s}") from e
+
+    @function_tool(name="add_to_favorites")
+    async def _client_tool_add_to_favorites(
+        self, context: RunContext, recipe_id: float, recipe_name: str, recipe_image: Optional[str] = None, rating: Optional[float] = None, description: Optional[str] = None, ingredients: Optional[str] = None
+    ) -> str:
+        """
+        Add the current recipe to the user's favorites list. Call this when the user completes a recipe and wants to save it, or when they      
+  explicitly ask to add it to favorites during cooking.
+
+        Args:
+            recipe_id:  The Spoonacular recipe ID number 
+            recipe_name: The name of the recipe
+            recipe_image: URL to the recipe image
+            rating: User's rating from 1-5 stars
+            description: Brief description of the recipe
+            ingredients: Comma-separated list of main ingredients
+        """
+
+        room = get_job_context().room
+        linked_participant = context.session.room_io.linked_participant
+        if not linked_participant:
+            raise ToolError("No linked participant found")
+
+        payload = {
+            "recipe_id": recipe_id,
+        
+            "recipe_name": recipe_name,
+        
+            "recipe_image": recipe_image,
+        
+            "rating": rating,
+        
+            "description": description,
+        
+            "ingredients": ingredients,
+        }
+
+        try:
+            response = await room.local_participant.perform_rpc(
+                destination_identity=linked_participant.identity,
+                method="add_to_favorites",
                 payload=json.dumps(payload),
                 response_timeout=10.0,
             )

@@ -1,8 +1,12 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { pb, getAvatarUrl, type UserPreferences } from '$lib/pocketbase';
+	import { pb, getAvatarUrl, type UserPreferences, type FavoriteRecipe } from '$lib/pocketbase';
 	import { onMount } from 'svelte';
+
+	// Tab state
+	type Tab = 'settings' | 'favorites';
+	let activeTab: Tab = $state('settings');
 
 	// User info
 	let name = $state('');
@@ -15,6 +19,11 @@
 	let favoriteCuisines: string[] = $state([]);
 	let notes = $state('');
 	let preferencesId: string | null = $state(null);
+
+	// Favorites
+	let favorites: FavoriteRecipe[] = $state([]);
+	let loadingFavorites = $state(false);
+	let selectedFavorite: FavoriteRecipe | null = $state(null);
 
 	// UI state
 	let loading = $state(true);
@@ -69,6 +78,55 @@
 		}
 	}
 
+	async function loadFavorites() {
+		const userId = pb.authStore.record?.id;
+		if (!userId) return;
+
+		loadingFavorites = true;
+		try {
+			const records = await pb.collection('favorite_recipes').getList<FavoriteRecipe>(1, 50, {
+				filter: `user = "${userId}"`,
+				sort: '-created'
+			});
+			favorites = records.items;
+		} catch (err) {
+			console.error('Failed to load favorites:', err);
+		} finally {
+			loadingFavorites = false;
+		}
+	}
+
+	async function deleteFavorite(id: string) {
+		try {
+			await pb.collection('favorite_recipes').delete(id);
+			favorites = favorites.filter(f => f.id !== id);
+			if (selectedFavorite?.id === id) {
+				selectedFavorite = null;
+			}
+		} catch (err) {
+			console.error('Failed to delete favorite:', err);
+		}
+	}
+
+	async function updateRating(id: string, rating: number) {
+		try {
+			await pb.collection('favorite_recipes').update(id, { rating });
+			favorites = favorites.map(f => f.id === id ? { ...f, rating } : f);
+			if (selectedFavorite?.id === id) {
+				selectedFavorite = { ...selectedFavorite, rating };
+			}
+		} catch (err) {
+			console.error('Failed to update rating:', err);
+		}
+	}
+
+	// Load favorites when switching to that tab
+	$effect(() => {
+		if (activeTab === 'favorites' && favorites.length === 0) {
+			loadFavorites();
+		}
+	});
+
 	async function saveProfile() {
 		saving = true;
 		error = '';
@@ -116,6 +174,11 @@
 	function removeItem(list: string[], item: string): string[] {
 		return list.filter(i => i !== item);
 	}
+
+	function renderStars(rating: number | undefined): string {
+		const filled = rating || 0;
+		return '★'.repeat(filled) + '☆'.repeat(5 - filled);
+	}
 </script>
 
 <div class="min-h-screen mise-gradient-bg pb-8">
@@ -150,6 +213,24 @@
 				</h1>
 			</div>
 		</div>
+
+		<!-- Tab Navigation -->
+		<div class="max-w-2xl mx-auto px-4">
+			<div class="flex gap-1 bg-surface-100 p-1 rounded-xl">
+				<button
+					onclick={() => activeTab = 'settings'}
+					class="flex-1 py-2 px-4 rounded-lg font-bold tracking-tighter lowercase text-sm transition-all {activeTab === 'settings' ? 'bg-white text-surface-700 shadow-sm' : 'text-surface-500 hover:text-surface-700'}"
+				>
+					settings
+				</button>
+				<button
+					onclick={() => activeTab = 'favorites'}
+					class="flex-1 py-2 px-4 rounded-lg font-bold tracking-tighter lowercase text-sm transition-all {activeTab === 'favorites' ? 'bg-white text-surface-700 shadow-sm' : 'text-surface-500 hover:text-surface-700'}"
+				>
+					favorites
+				</button>
+			</div>
+		</div>
 	</div>
 
 	<!-- Content -->
@@ -162,7 +243,8 @@
 					<div class="h-12 bg-surface-100 rounded-xl"></div>
 				</div>
 			</div>
-		{:else}
+		{:else if activeTab === 'settings'}
+			<!-- Settings Tab -->
 			<!-- Messages -->
 			{#if error}
 				<div class="mb-4 bg-error-100 border border-error-500 text-error-700 px-4 py-3 rounded-xl text-sm font-medium tracking-tighter lowercase">
@@ -326,6 +408,155 @@
 					{/if}
 				</button>
 			</form>
+		{:else}
+			<!-- Favorites Tab -->
+			{#if loadingFavorites}
+				<div class="space-y-4">
+					{#each [1, 2, 3] as _}
+						<div class="bg-white rounded-2xl p-4 shadow-sm animate-pulse">
+							<div class="flex gap-4">
+								<div class="w-20 h-20 bg-surface-200 rounded-xl"></div>
+								<div class="flex-1 space-y-2">
+									<div class="h-5 bg-surface-200 rounded w-3/4"></div>
+									<div class="h-4 bg-surface-100 rounded w-1/2"></div>
+								</div>
+							</div>
+						</div>
+					{/each}
+				</div>
+			{:else if favorites.length === 0}
+				<div class="text-center py-12 bg-white rounded-2xl shadow-sm">
+					<div class="text-5xl mb-4">🍽️</div>
+					<h3 class="text-lg font-bold tracking-tighter text-surface-700 lowercase mb-2">
+						no favorites yet
+					</h3>
+					<p class="text-sm text-surface-500 tracking-tighter lowercase max-w-xs mx-auto">
+						after cooking a recipe, tell bruno you want to add it to your favorites
+					</p>
+				</div>
+			{:else}
+				<div class="space-y-3">
+					{#each favorites as favorite (favorite.id)}
+						<button
+							onclick={() => selectedFavorite = favorite}
+							class="w-full bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow text-left"
+						>
+							<div class="flex gap-4">
+								{#if favorite.recipe_image}
+									<img
+										src={favorite.recipe_image}
+										alt={favorite.recipe_name}
+										class="w-20 h-20 rounded-xl object-cover bg-surface-100"
+									/>
+								{:else}
+									<div class="w-20 h-20 rounded-xl bg-surface-100 flex items-center justify-center text-3xl">
+										🍳
+									</div>
+								{/if}
+								<div class="flex-1 min-w-0">
+									<h3 class="font-bold tracking-tighter text-surface-700 lowercase truncate">
+										{favorite.recipe_name}
+									</h3>
+									<p class="text-primary-500 text-sm mt-1">
+										{renderStars(favorite.rating)}
+									</p>
+									{#if favorite.description}
+										<p class="text-sm text-surface-500 mt-1 line-clamp-2">
+											{favorite.description}
+										</p>
+									{/if}
+								</div>
+							</div>
+						</button>
+					{/each}
+				</div>
+			{/if}
 		{/if}
 	</div>
 </div>
+
+<!-- Favorite Detail Modal -->
+{#if selectedFavorite}
+	<button
+		class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 cursor-default border-none"
+		onclick={() => selectedFavorite = null}
+		aria-label="Close"
+	></button>
+	<div class="fixed inset-4 md:inset-8 lg:inset-16 bg-white rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden">
+		<!-- Header -->
+		<div class="flex items-start justify-between p-4 md:p-6 border-b border-surface-200">
+			<div class="flex-1 min-w-0 pr-4">
+				<h2 class="text-xl font-black tracking-tighter text-surface-700 lowercase truncate">
+					{selectedFavorite.recipe_name}
+				</h2>
+				<!-- Star Rating -->
+				<div class="flex items-center gap-1 mt-2">
+					{#each [1, 2, 3, 4, 5] as star}
+						<button
+							onclick={() => updateRating(selectedFavorite!.id, star)}
+							class="text-2xl transition-colors {star <= (selectedFavorite?.rating || 0) ? 'text-primary-500' : 'text-surface-300 hover:text-primary-300'}"
+						>
+							★
+						</button>
+					{/each}
+				</div>
+			</div>
+			<button
+				onclick={() => selectedFavorite = null}
+				class="p-2 rounded-full hover:bg-surface-200 transition-colors"
+				aria-label="Close"
+			>
+				<svg class="w-6 h-6 text-surface-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
+		</div>
+
+		<!-- Content -->
+		<div class="flex-1 overflow-y-auto p-4 md:p-6">
+			{#if selectedFavorite.recipe_image}
+				<img
+					src={selectedFavorite.recipe_image}
+					alt={selectedFavorite.recipe_name}
+					class="w-full h-48 md:h-64 rounded-xl object-cover mb-6"
+				/>
+			{/if}
+
+			{#if selectedFavorite.description}
+				<div class="mb-6">
+					<h3 class="text-sm font-bold tracking-tighter text-surface-500 lowercase mb-2">description</h3>
+					<p class="text-surface-700">{selectedFavorite.description}</p>
+				</div>
+			{/if}
+
+			{#if selectedFavorite.ingredients && selectedFavorite.ingredients.length > 0}
+				<div>
+					<h3 class="text-sm font-bold tracking-tighter text-surface-500 lowercase mb-2">ingredients</h3>
+					<div class="flex flex-wrap gap-2">
+						{#each selectedFavorite.ingredients as ingredient}
+							<span class="px-3 py-1 bg-surface-100 text-surface-700 rounded-full text-sm font-medium tracking-tighter lowercase">
+								{ingredient}
+							</span>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		</div>
+
+		<!-- Footer -->
+		<div class="p-4 border-t border-surface-200 flex justify-between items-center">
+			<button
+				onclick={() => { deleteFavorite(selectedFavorite!.id); }}
+				class="px-4 py-2 text-error-500 hover:bg-error-50 font-bold tracking-tighter lowercase rounded-xl transition-colors"
+			>
+				remove from favorites
+			</button>
+			<button
+				onclick={() => selectedFavorite = null}
+				class="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white font-bold tracking-tighter lowercase rounded-xl transition-colors"
+			>
+				close
+			</button>
+		</div>
+	</div>
+{/if}

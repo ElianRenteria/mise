@@ -658,6 +658,57 @@
 		}
 	}
 
+	// Handle add_to_favorites RPC from agent
+	async function handleAddToFavoritesRpc(params: Record<string, any>) {
+		console.log('Processing add to favorites:', params);
+
+		const userId = pb.authStore.record?.id;
+		if (!userId) {
+			console.warn('No user logged in');
+			throw new Error('Not logged in');
+		}
+
+		// Validate required fields
+		if (!params.recipe_id || !params.recipe_name) {
+			throw new Error('recipe_id and recipe_name are required');
+		}
+
+		// Parse ingredients if it's a string
+		let ingredients = params.ingredients;
+		if (typeof ingredients === 'string') {
+			ingredients = ingredients.split(',').map((s: string) => s.trim()).filter((s: string) => s);
+		}
+
+		const favoriteData = {
+			user: userId,
+			recipe_id: parseInt(params.recipe_id, 10),
+			recipe_name: params.recipe_name,
+			recipe_image: params.recipe_image || null,
+			rating: params.rating ? parseInt(params.rating, 10) : null,
+			description: params.description || null,
+			ingredients: ingredients || null
+		};
+
+		try {
+			// Check if already favorited
+			const existing = await pb.collection('favorite_recipes').getList(1, 1, {
+				filter: `user = "${userId}" && recipe_id = ${favoriteData.recipe_id}`
+			});
+
+			if (existing.items.length > 0) {
+				console.log('Recipe already in favorites');
+				return { alreadyExists: true, id: existing.items[0].id };
+			}
+
+			const created = await pb.collection('favorite_recipes').create(favoriteData);
+			console.log('Added to favorites:', created);
+			return { success: true, id: created.id };
+		} catch (err) {
+			console.error('Failed to add to favorites:', err);
+			throw err;
+		}
+	}
+
 	// Handle the update_user_preferences client tool call (legacy data channel method)
 	// Params come as comma-separated strings from the agent
 	async function handleUpdatePreferencesTool(
@@ -1047,6 +1098,22 @@
 				} catch (err) {
 					console.error('Failed to handle cooking session update RPC:', err);
 					return JSON.stringify({ success: false, error: 'Failed to update cooking session' });
+				}
+			});
+
+			// Register RPC handler for adding recipes to favorites
+			room.localParticipant.registerRpcMethod('add_to_favorites', async (data: RpcInvocationData) => {
+				console.log('RPC received: add_to_favorites', data.payload);
+				try {
+					const params = JSON.parse(data.payload);
+					const result = await handleAddToFavoritesRpc(params);
+					if (result.alreadyExists) {
+						return JSON.stringify({ success: true, message: 'Recipe is already in your favorites!', alreadyExists: true });
+					}
+					return JSON.stringify({ success: true, message: 'Added to favorites!' });
+				} catch (err) {
+					console.error('Failed to add to favorites RPC:', err);
+					return JSON.stringify({ success: false, error: 'Failed to add to favorites' });
 				}
 			});
 
