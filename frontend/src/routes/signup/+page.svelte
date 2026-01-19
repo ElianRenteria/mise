@@ -40,6 +40,13 @@
 				name: firstName.trim()
 			});
 
+			// Request verification email
+			try {
+				await pb.collection('users').requestVerification(email);
+			} catch (verifyErr) {
+				console.warn('Failed to send verification email:', verifyErr);
+			}
+
 			// Auto-login after signup
 			await pb.collection('users').authWithPassword(email, password);
 
