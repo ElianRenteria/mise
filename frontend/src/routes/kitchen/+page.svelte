@@ -62,7 +62,7 @@
 	let showThinking: boolean = $state(false);
 	let thinkingStartTime: number = $state(0);
 	let thinkingTimeout: ReturnType<typeof setTimeout> | null = null;
-	const MINIMUM_THINKING_DURATION = 2500; // Show thinking for at least 2.5 seconds
+	const MINIMUM_THINKING_DURATION = 2000; // Show thinking for at least 2 seconds
 
 	// Keep thinking state visible for minimum duration
 	$effect(() => {
@@ -596,6 +596,68 @@
 		}
 	}
 
+	// Handle update_cooking_session RPC from agent
+	async function handleUpdateCookingSessionRpc(params: Record<string, any>) {
+		console.log('Processing cooking session update:', params);
+
+		if (!currentSessionId) {
+			console.warn('No active session to update');
+			return;
+		}
+
+		const updateData: Record<string, any> = {};
+
+		// Recipe selection
+		if (params.recipe_id !== undefined) {
+			updateData.selected_recipe_id = params.recipe_id;
+		}
+		if (params.recipe_name !== undefined) {
+			updateData.recipe_name = params.recipe_name;
+		}
+		if (params.recipe_data !== undefined) {
+			updateData.recipe_data = params.recipe_data;
+		}
+
+		// Ingredients
+		if (params.ingredients !== undefined) {
+			// Can be an array or comma-separated string
+			if (typeof params.ingredients === 'string') {
+				updateData.ingredients = params.ingredients.split(',').map((s: string) => s.trim()).filter((s: string) => s);
+			} else if (Array.isArray(params.ingredients)) {
+				updateData.ingredients = params.ingredients;
+			}
+		}
+
+		// Cooking progress
+		if (params.current_step !== undefined) {
+			updateData.current_step = parseInt(params.current_step, 10);
+		}
+		if (params.current_phase !== undefined) {
+			updateData.current_phase = params.current_phase;
+		}
+
+		// Only update if there's something to update
+		if (Object.keys(updateData).length > 0) {
+			try {
+				await pb.collection('cooking_sessions').update(currentSessionId, updateData);
+				console.log('Cooking session updated via RPC:', updateData);
+
+				// If recipe name was set, update our local tracking
+				if (updateData.recipe_name) {
+					hasSetRecipeName = true;
+				}
+
+				// If we're now in cooking phase, update the mode
+				if (updateData.current_phase === 'cooking') {
+					isInCookingMode = true;
+				}
+			} catch (err) {
+				console.error('Failed to update cooking session:', err);
+				throw err;
+			}
+		}
+	}
+
 	// Handle the update_user_preferences client tool call (legacy data channel method)
 	// Params come as comma-separated strings from the agent
 	async function handleUpdatePreferencesTool(
@@ -839,6 +901,16 @@
 			`${m.role === 'user' ? 'User' : 'Bruno'}: ${m.content}`
 		).join('\n');
 
+		// Parse recipe_data if it's a string
+		let recipeData = continuingSession.recipe_data;
+		if (typeof recipeData === 'string') {
+			try {
+				recipeData = JSON.parse(recipeData);
+			} catch {
+				recipeData = null;
+			}
+		}
+
 		const contextMessage = {
 			type: 'session_context',
 			is_continuation: true,
@@ -846,8 +918,11 @@
 			transcript_summary: transcriptSummary,
 			recipe_name: continuingSession.recipe_name,
 			recipe_id: continuingSession.selected_recipe_id,
+			recipe_data: recipeData,
+			ingredients: continuingSession.ingredients,
 			current_phase: continuingSession.current_phase,
-			current_step: continuingSession.current_step
+			current_step: continuingSession.current_step,
+			instructions: `You are continuing a cooking session. The user was making "${continuingSession.recipe_name || 'a recipe'}". They were on step ${continuingSession.current_step || 1} of the cooking process. Use the recipe_data provided to continue guiding them from where they left off. Do NOT ask what they were cooking - you have all the information. Start by acknowledging their return and tell them exactly where they left off.`
 		};
 
 		try {
@@ -959,6 +1034,19 @@
 				} catch (err) {
 					console.error('Failed to handle preference update RPC:', err);
 					return JSON.stringify({ success: false, error: 'Failed to update preferences' });
+				}
+			});
+
+			// Register RPC handler for cooking session updates from agent
+			room.localParticipant.registerRpcMethod('update_cooking_session', async (data: RpcInvocationData) => {
+				console.log('RPC received: update_cooking_session', data.payload);
+				try {
+					const params = JSON.parse(data.payload);
+					await handleUpdateCookingSessionRpc(params);
+					return JSON.stringify({ success: true, message: 'Cooking session updated successfully' });
+				} catch (err) {
+					console.error('Failed to handle cooking session update RPC:', err);
+					return JSON.stringify({ success: false, error: 'Failed to update cooking session' });
 				}
 			});
 
