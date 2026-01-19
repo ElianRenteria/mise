@@ -1422,14 +1422,25 @@
 					const params = JSON.parse(data.payload);
 
 					// Validate required fields
-					if (!params.recipe_name || !params.items || !Array.isArray(params.items)) {
-						throw new Error('recipe_name and items array are required');
+					if (!params.recipe_name || !params.items) {
+						throw new Error('recipe_name and items are required');
+					}
+
+					// Handle items as either array or comma-separated string
+					let itemsArray: string[];
+					if (Array.isArray(params.items)) {
+						itemsArray = params.items;
+					} else if (typeof params.items === 'string') {
+						// Split by comma and clean up each item
+						itemsArray = params.items.split(',').map((item: string) => item.trim()).filter((item: string) => item.length > 0);
+					} else {
+						throw new Error('items must be an array or comma-separated string');
 					}
 
 					// Store the shopping list data and show the modal
 					shoppingListData = {
 						recipeName: params.recipe_name,
-						items: params.items
+						items: itemsArray
 					};
 					showShoppingList = true;
 
