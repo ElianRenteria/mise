@@ -1,91 +1,31 @@
-# 🦝 Mise
+# mise
 
-> *Everything in its place* - Your AI-powered cooking companion
+> *everything in its place*
 
-Mise (pronounced "MEEZ") is a voice-first cooking assistant that guides you through recipes hands-free. Named after the French culinary term "mise en place," it helps you stay organized in the kitchen with your friendly raccoon sous chef, Bruno.
+mise is a voice-first cooking app that guides you through recipes completely hands-free. Just tell Bruno, your AI sous chef, what ingredients you have, and he'll find recipes and walk you through cooking step by step.
 
-## ✨ Features
+## what it does
 
-- 🎤 **Voice-First Interface** - Hands-free cooking guidance (no touching your phone with messy hands!)
-- 🍳 **Smart Recipe Search** - Find recipes based on ingredients you have
-- 📝 **Kitchen History** - Track what you've cooked and your modifications
-- 🧠 **Context Aware** - Remembers your dietary preferences and ingredient dislikes
-- 📱 **Mobile-First Design** - Built for use in the kitchen
-- 🔄 **Session Resumption** - Disconnected? Pick up right where you left off
+**talk, don't tap** — control everything with your voice so you never have to touch your phone with messy hands
 
-## 🏗️ Architecture
+**find recipes from what you have** — tell Bruno your ingredients and he'll suggest dishes you can actually make
 
-- **frontend/** - SvelteKit application (Svelte 5, TypeScript) with MCP integration
-- **PocketBase/** - Docker-based PocketBase backend service
+**step-by-step guidance** — Bruno walks you through each step, waiting for you to finish before moving on
 
-## 🛠️ Tech Stack
+**remembers your preferences** — mention you're vegetarian or hate cilantro and Bruno will remember for next time
 
-- **Frontend:** SvelteKit + Svelte 5 + TypeScript + Tailwind CSS
-- **Backend:** PocketBase (auth + database)
-- **Voice Agent:** LiveKit Agents + OpenAI GPT-4
-- **APIs:** Spoonacular (recipes), Deepgram (STT), ElevenLabs (TTS)
-- **Deployment:** Nginx reverse proxy
+**pick up where you left off** — phone died mid-recipe? rejoin and continue exactly where you stopped
 
-## 🚀 Quick Start
+**save your favorites** — keep track of recipes you loved and make them again anytime
 
-### Prerequisites
+## meet bruno
 
-- Node.js v23+
-- Docker & Docker Compose
+Bruno is your friendly raccoon sous chef. He's organized, encouraging, and genuinely loves helping people cook. He'll find recipes that work with what you have, guide you through the cooking process, and celebrate with you when the dish is done.
 
-### Frontend Setup
+## try it
 
-```bash
-cd frontend
-npm install --force   # --force needed for Node v23
-npm run dev           # Start dev server at http://localhost:5173
-```
-
-### Backend Setup
-
-```bash
-cd PocketBase
-docker compose up -d  # Start PocketBase container
-```
-
-PocketBase admin dashboard: `https://mise.elianrenteria.dev/_/`
-
-### Available Commands
-
-**Frontend:**
-```bash
-npm run dev           # Start dev server
-npm run build         # Build for production
-npm run preview       # Preview production build
-npm run check         # Type-check with svelte-check
-npm run check:watch   # Type-check in watch mode
-```
-
-**Backend:**
-```bash
-docker compose up -d    # Start PocketBase container
-docker compose down     # Stop PocketBase container
-docker compose logs -f  # View logs
-```
-
-## 📱 Features in Detail
-
-### Voice-Guided Cooking
-Tell Bruno what ingredients you have, and he'll suggest recipes and guide you through each step.
-
-### Kitchen History
-Every cooking session is saved with your modifications, ratings, and notes. Easily cook the same recipe again.
-
-### Smart Learning
-Mise remembers if you're vegetarian, hate cilantro, or prefer Greek yogurt over sour cream - and automatically filters suggestions.
-
-### Session Resumption
-Phone died mid-recipe? No problem. Rejoin and Bruno will remember exactly where you left off.
-
-## 🦝 Meet Bruno
-
-Bruno is your resourceful raccoon sous chef who helps you make the most of what you have. Organized, encouraging, and always ready to help you cook something delicious.
+visit [mise.elianrenteria.dev](https://mise.elianrenteria.dev) to start cooking
 
 ---
 
-Built with ❤️ by Elian Renteria
+built by [elian renteria](https://github.com/elianrenteria)
