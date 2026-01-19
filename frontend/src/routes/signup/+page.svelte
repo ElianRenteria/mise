@@ -3,6 +3,7 @@
 	import { base } from '$app/paths';
 	import { pb } from '$lib/pocketbase';
 
+	let firstName = $state('');
 	let email = $state('');
 	let password = $state('');
 	let confirmPassword = $state('');
@@ -12,6 +13,11 @@
 	async function handleSignup(e: Event) {
 		e.preventDefault();
 		error = '';
+
+		if (!firstName.trim()) {
+			error = 'please enter your first name';
+			return;
+		}
 
 		if (password !== confirmPassword) {
 			error = 'passwords do not match';
@@ -26,14 +32,38 @@
 		loading = true;
 
 		try {
-			await pb.collection('users').create({
+			// Create the user account
+			const newUser = await pb.collection('users').create({
 				email,
 				password,
-				passwordConfirm: confirmPassword
+				passwordConfirm: confirmPassword,
+				name: firstName.trim()
 			});
 
 			// Auto-login after signup
 			await pb.collection('users').authWithPassword(email, password);
+
+			// Generate and set DiceBear avatar
+			try {
+				const avatarUrl = `https://api.dicebear.com/9.x/dylan/svg?seed=${encodeURIComponent(firstName.trim())}`;
+				const response = await fetch(avatarUrl);
+				const svgBlob = await response.blob();
+
+				// Create a File object from the blob
+				const avatarFile = new File([svgBlob], `avatar-${firstName.trim()}.svg`, { type: 'image/svg+xml' });
+
+				// Upload avatar to user record
+				const formData = new FormData();
+				formData.append('avatar', avatarFile);
+				await pb.collection('users').update(newUser.id, formData);
+
+				// Refresh auth to get updated user data with avatar
+				await pb.collection('users').authRefresh();
+			} catch (avatarErr) {
+				// Avatar upload failed, but account was created - continue anyway
+				console.warn('Failed to set avatar:', avatarErr);
+			}
+
 			await goto('/kitchen');
 		} catch (err: any) {
 			if (err?.data?.data?.email?.message) {
@@ -66,6 +96,19 @@
 						{error}
 					</div>
 				{/if}
+
+				<div>
+					<label for="firstName" class="mise-label">first name</label>
+					<input
+						id="firstName"
+						type="text"
+						bind:value={firstName}
+						required
+						autocomplete="given-name"
+						placeholder="chef"
+						class="mise-input"
+					/>
+				</div>
 
 				<div>
 					<label for="email" class="mise-label">email</label>

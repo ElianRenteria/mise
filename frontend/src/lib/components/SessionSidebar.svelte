@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { pb, type CookingSession } from '$lib/pocketbase';
+	import { pb, getAvatarUrl, type CookingSession } from '$lib/pocketbase';
 
 	// Props
 	let {
@@ -20,6 +20,20 @@
 	let loading: boolean = $state(true);
 	let deletingId: string | null = $state(null);
 	let error: string = $state('');
+
+	// Get user avatar URL - falls back to DiceBear if no avatar stored
+	function getUserAvatarUrl(): string | null {
+		const user = pb.authStore.record;
+		if (user?.avatar) {
+			return getAvatarUrl(user.id, user.avatar);
+		}
+		// Fallback to DiceBear avatar using user's name or email
+		if (user?.name || user?.email) {
+			const seed = user.name || user.email.split('@')[0];
+			return `https://api.dicebear.com/9.x/dylan/svg?seed=${encodeURIComponent(seed)}`;
+		}
+		return null;
+	}
 
 	// Reload sessions when sidebar opens
 	$effect(() => {
@@ -326,10 +340,29 @@
 	</div>
 
 	<!-- Footer -->
-	<div class="p-4 border-t border-surface-200">
+	<div class="p-4 border-t border-surface-200 space-y-3">
+		<button
+			onclick={() => { goto(`${base}/profile`); isOpen = false; }}
+			class="w-full py-3 px-4 bg-surface-200 hover:bg-surface-300 text-surface-700 font-bold tracking-tighter lowercase rounded-xl transition-colors flex items-center justify-center gap-2"
+		>
+			{#if getUserAvatarUrl()}
+				<img
+					src={getUserAvatarUrl()}
+					alt="Your avatar"
+					class="w-6 h-6 rounded-full object-cover bg-surface-200"
+				/>
+			{:else}
+				<div class="w-6 h-6 rounded-full bg-primary-500 flex items-center justify-center">
+					<svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+					</svg>
+				</div>
+			{/if}
+			chef's profile
+		</button>
 		<button
 			onclick={() => { pb.authStore.clear(); goto(`${base}/`); }}
-			class="w-full py-2 text-sm font-medium tracking-tighter text-surface-500 hover:text-primary-500 lowercase transition-colors"
+			class="w-full py-2 text-sm font-medium tracking-tighter text-surface-500 hover:text-error-500 lowercase transition-colors"
 		>
 			logout
 		</button>

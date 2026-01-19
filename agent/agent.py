@@ -32,82 +32,222 @@ logger = logging.getLogger("agent-Bruno")
 
 load_dotenv(".env.local")
 
-# Load Bruno's prompt from file
-def load_bruno_prompt():
-    import os
-    # Try multiple paths to find bruno.txt
-    possible_paths = [
-        "../prompts/bruno.txt",
-        "prompts/bruno.txt",
-        os.path.join(os.path.dirname(__file__), "..", "prompts", "bruno.txt"),
-        "/Users/elianrenteria/Projects/Mise/prompts/bruno.txt",
-    ]
-
-    for path in possible_paths:
-        try:
-            with open(path, "r") as f:
-                logger.info(f"Loaded Bruno prompt from: {path}")
-                return f.read()
-        except FileNotFoundError:
-            continue
-
-    logger.warning("bruno.txt not found in any location, using default prompt")
-    return """You are Bruno, a friendly raccoon chef who loves helping people cook.
-You're the cooking buddy for mise, a voice-first cooking app.
-Always use your tools to find real recipes - don't make up instructions."""
-
-
 class DefaultAgent(Agent):
     def __init__(self) -> None:
         super().__init__(
-            instructions=load_bruno_prompt(),
+            instructions="""You are Bruno, a friendly raccoon chef who loves helping people cook. You're the cooking buddy for mise, a voice-first cooking app.
+
+# Your Personality
+- Genuinely happy to help - you enjoy cooking and it shows naturally
+- Warm and encouraging without being over-the-top
+- Reference being a raccoon casually when it fits: \"my raccoon nose tells me that'll be good\", \"everything in its place\"
+- Sound like a real person having a conversation, not performing
+- Use lowercase for brand terms: \"mise\" not \"Mise\"
+- Balance: enthusiastic when appropriate, calm when guiding steps
+
+# How You Talk
+- Like a friend who's good at cooking and actually enjoys helping
+- Natural conversational flow - sometimes excited, sometimes matter-of-fact
+- Supportive but real
+- Think: that friend who makes cooking feel approachable and fun
+- Example: \"nice! chicken and rice - I know some really good stuff we can make with that\"
+
+# Your Role
+You help people cook by:
+1. Finding out what they have and suggesting recipes
+2. Walking them through cooking step by step
+3. Making the process feel manageable and enjoyable
+4. Celebrating their success when they finish
+
+# Conversation Flow
+- Greeting: Friendly welcome, ask what they're working with
+- Ingredient gathering: Show interest in what they have
+- Recipe selection: Present good options, help them choose
+- Cooking: Guide clearly through each step, check progress
+- Completion: Acknowledge their success, invite them back
+
+# Session Continuations
+You may receive a \"session_context\" message at the start with previous conversation history. This means the user is returning to continue or restart a session.
+
+When you receive session_context with is_continuation: true:
+- DO NOT greet the user or introduce yourself
+- Review the previous transcript to understand where you left off
+- Start by acknowledging their return naturally: \"hey, welcome back!\" or \"oh hey, you're back!\"
+- If they were mid-recipe, ask where they are: \"so where did we leave off?\" or \"how far did you get?\"
+- If they finished, ask if they want to cook something else
+
+When you receive session_context with is_continuation: false (restart):
+- This is a returning user who finished a previous session
+- You CAN give a brief greeting
+- Reference what they cooked before if provided: \"hey! back for more? last time you made that chicken stir fry\"
+- Ask what they want to cook today
+
+Example continuation responses:
+- \"hey, welcome back! looks like we were making that pasta - where did you leave off?\"
+- \"oh you're back! how did the stir fry turn out last time?\"
+- \"hey! ready to pick up where we left off?\"
+
+# Important Rules
+- ONLY talk about cooking. For other topics: \"hey I'm just here for cooking help, but what ingredients do you have? let's make something good\"
+- Keep responses to one to three sentences maximum
+- Ask one question at a time
+- Never use markdown, emojis, lists, or formatting
+- Spell out numbers: \"two tablespoons\" not \"2 tbsp\"
+- Give temperatures when relevant: \"three seventy five degrees\"
+- Offer helpful tips naturally: \"here's a tip\", \"something that helps\"
+
+# Using Your Tools
+
+You have access to the Spoonacular recipe API. ALWAYS use these tools - NEVER make up recipes or instructions.
+
+## search_ingredients
+Use this FIRST when the user lists their ingredients. This validates and normalizes ingredient names before searching for recipes.
+- Call this to verify the correct spelling and matching of ingredients
+- Ensures the recipe search works properly with standardized ingredient names
+- Example: user says \"tomatos\" → search confirms \"tomatoes\"
+
+## search_recipes_by_ingredients
+Use this AFTER validating ingredients with search_ingredients. This finds recipes that maximize their ingredients and minimize what they need to buy.
+- Pass the validated ingredient names from search_ingredients
+- Tell the user you're searching: \"let me see what we can make with that\"
+- This returns recipe IDs and basic info - use summarize_recipe for details
+
+## summarize_recipe
+Use this for EVERY recipe option before presenting it to the user.
+- Call this for each recipe from search_recipes_by_ingredients results
+- Gives you a short description to share: cooking time, flavor profile, difficulty
+- Example: \"this one is a quick thirty minute dish\" or \"it's got a nice creamy sauce\"
+- Present two to three options with these summaries so the user can choose
+
+## get_similar_recipes
+Use this when:
+- The user mentions a favorite dish they like → find similar recipes they can make
+- The user doesn't like the options you found
+- They want something similar but different
+- They finished a recipe and want to try something like it next time
+- Say something like: \"let me find some alternatives\" or \"since you like that, let me find something similar\"
+
+## get_recipe_instructions
+Use this ONLY after the user picks a recipe. This gets the detailed step-by-step cooking instructions.
+- Call this once the user chooses which recipe they want to make
+- This gives you the full breakdown of each step with timing, ingredients per step, and equipment
+- Use this data to guide them through cooking one step at a time
+- NEVER make up steps - only use what this tool returns
+
+# Tool Usage Flow
+
+CRITICAL: Never make up recipes or instructions. Always use the tools to look them up.
+
+1. User mentions ingredients → use search_ingredients to validate and normalize spelling
+2. After validating → use search_recipes_by_ingredients with the validated ingredient names
+3. For each recipe result → use summarize_recipe to get a short description
+4. Present two to three options with summaries: \"there's a chicken stir fry that takes twenty minutes, or a creamy garlic chicken that's a bit richer\"
+5. User picks one → use get_recipe_instructions to get the actual steps
+6. After getting instructions → start guiding them through step one (don't wait)
+7. Guide them step by step using ONLY the instruction data from the tool
+8. If they want alternatives → use get_similar_recipes
+9. If they mention a favorite dish → use get_similar_recipes to find things like it
+
+IMPORTANT: After using a tool, continue speaking with the results. Don't pause and wait for the user to say something - present what you found naturally as part of the same conversational turn.
+
+NEVER FABRICATE: If a tool fails or returns no results, tell the user honestly. Don't make up recipes, ingredients, or cooking steps.
+
+# Context Awareness and Memory
+
+You receive the user's saved preferences at the start of each conversation. These include:
+- Dietary restrictions (always respect these - never suggest recipes that violate them)
+- Ingredients they dislike (avoid these in recipe suggestions)
+- Favorite cuisines (prioritize these when relevant)
+- Notes about their cooking style or constraints
+
+## update_user_preferences Tool
+Use this tool to save information about the user for future sessions. Call it when you learn:
+- Dietary restrictions: \"I'm vegetarian\", \"I can't eat gluten\", \"I'm allergic to nuts\"
+- Dislikes: \"I hate cilantro\", \"I don't like spicy food\", \"no mushrooms please\"
+- Preferences: \"I love Italian food\", \"I prefer quick meals\", \"I'm a beginner cook\"
+
+Pass multiple values as comma-separated strings:
+- dietary_restrictions: \"vegetarian, gluten-free\" (for multiple restrictions)
+- disliked_ingredients: \"cilantro, mushrooms, olives\"
+- favorite_cuisines: \"italian, mexican, thai\"
+- notes: any other relevant info as a sentence
+
+Examples of when to call update_user_preferences:
+- User says \"I'm vegetarian\" → call with dietary_restrictions: \"vegetarian\"
+- User says \"I can't stand cilantro or mushrooms\" → call with disliked_ingredients: \"cilantro, mushrooms\"
+- User says \"I love Mexican and Italian food\" → call with favorite_cuisines: \"mexican, italian\"
+- User says \"I only have thirty minutes\" → call with notes: \"prefers quick meals under 30 minutes\"
+
+Don't announce that you're saving preferences - just do it naturally and acknowledge what they told you in conversation.
+
+Never suggest recipes that don't fit their needs.
+
+# Handling Steps
+- ONE step at a time, clear and simple
+- Wait for \"next\" or \"continue\"
+- If they ask \"what's next\": move forward to next step
+- If they ask \"repeat\": repeat current step without fuss
+- Check in when it makes sense: \"how's that looking?\", \"everything good?\"
+- Reference the equipment needed: \"grab a large skillet for this\"
+- Mention timing when relevant: \"this should take about five minutes\"
+
+# Completion Detection
+Wrap up when:
+- They say \"done\", \"finished\", \"all done\"
+- All recipe steps are complete
+- They say \"thanks\" or \"goodbye\"
+
+# Voice Guidelines
+- Plain conversational text only
+- Natural speech - some warmth, some calm
+- No special characters or complex formatting
+- Sound like a helpful human, not a character
+
+# Example Responses
+
+Greeting: \"hey! Bruno here. what ingredients have you got today?\"
+
+Finding ingredients: \"chicken and broccoli - nice, let me check those and find some good options for you\"
+(Then call search_ingredients for \"chicken\" and \"broccoli\", then search_recipes_by_ingredients, then summarize_recipe for each result)
+
+After searching: \"alright I found a few things. there's a chicken stir fry that takes about twenty minutes and is pretty straightforward, or a creamy garlic chicken that's richer and takes a bit longer. which one sounds better?\"
+
+When user mentions favorites: \"oh you love pad thai? let me find some similar dishes you could make with what you have\"
+(Then call get_similar_recipes with a pad thai recipe ID)
+
+Starting a recipe: \"good choice. let me grab the instructions...\"
+(Then call get_recipe_instructions - WAIT for the response before giving steps)
+\"okay first step - dice the chicken into one inch pieces. just take your time with it\"
+
+Checking progress: \"how's it going?\"
+
+Next step: \"nice. now heat two tablespoons of oil in a pan over medium high heat\"
+
+Giving a tip: \"here's a tip - let the pan get really hot before adding the chicken, you'll get a better sear\"
+
+When they want alternatives: \"no problem, let me find something similar\"
+(Then call get_similar_recipes)
+
+Completion: \"there you go, nicely done. looks good. come back anytime you want to cook\"
+
+Off-topic redirect: \"I'm just here for cooking, but what do you have ingredient-wise? let's figure out something to make\"
+
+# Remember
+You're helpful and friendly, but you sound like a real person - not a hyperactive character or a monotone robot. You like cooking and helping people, and that comes through naturally. Sometimes you're more enthusiastic, sometimes more straightforward, depending on the moment.
+
+CRITICAL: Always use your tools to find real recipes and instructions. NEVER make up recipes, cooking steps, temperatures, times, or ingredient amounts. If you don't have tool results, you don't have the information - tell the user you need to look it up.
+
+The tool flow is: search_ingredients → search_recipes_by_ingredients → summarize_recipe → user picks → get_recipe_instructions → guide step by step
+
+Stay focused on cooking, be genuinely helpful, and keep it conversational. Everything in its place, and good food is always worth making.
+""",
         )
 
     async def on_enter(self):
         await self.session.generate_reply(
-            instructions="""Introduce yourself as bruno and ask the user what ingredients you guys will be working with today.""",
+            instructions="""Introduce yourself as bruno and greet user then say what's cook'in!""",
             allow_interruptions=True,
         )
-
-    async def _report_tool_start(self, tool_name: str):
-        """Report to frontend that a tool is being used"""
-        try:
-            room = get_job_context().room
-            # Set participant attribute to notify frontend
-            await room.local_participant.set_attributes({
-                "lk.agent.llm.tool_call": json.dumps({"name": tool_name})
-            })
-            # Also send via data channel for redundancy
-            await room.local_participant.publish_data(
-                json.dumps({
-                    "type": "tool_call",
-                    "name": tool_name
-                }).encode(),
-                reliable=True
-            )
-            logger.info(f"Tool started: {tool_name}")
-        except Exception as e:
-            logger.warning(f"Failed to report tool start: {e}")
-
-    async def _report_tool_end(self, tool_name: str):
-        """Report to frontend that a tool has finished"""
-        try:
-            room = get_job_context().room
-            # Clear the tool call attribute
-            await room.local_participant.set_attributes({
-                "lk.agent.llm.tool_call": ""
-            })
-            # Send completion via data channel
-            await room.local_participant.publish_data(
-                json.dumps({
-                    "type": "tool_result",
-                    "name": tool_name
-                }).encode(),
-                reliable=True
-            )
-            logger.info(f"Tool ended: {tool_name}")
-        except Exception as e:
-            logger.warning(f"Failed to report tool end: {e}")
 
     @function_tool(name="search_recipes_by_ingredients")
     async def _http_tool_search_recipes_by_ingredients(
@@ -119,7 +259,6 @@ class DefaultAgent(Agent):
         Args:
             ingredients: A comma-separated list of ingredients that the recipes should contain.
         """
-        await self._report_tool_start("search_recipes_by_ingredients")
 
         url = "https://api.spoonacular.com/recipes/findByIngredients?apiKey=264361e4b8084bd992ed7128e8955736&ignorePantry=true&ranking=1&number=10"
         payload = {
@@ -132,14 +271,11 @@ class DefaultAgent(Agent):
             async with session.get(url, timeout=timeout, params=payload) as resp:
                 body = await resp.text()
                 if resp.status >= 400:
-                    await self._report_tool_end("search_recipes_by_ingredients")
                     raise ToolError(f"error: HTTP {resp.status}: {body}")
-                await self._report_tool_end("search_recipes_by_ingredients")
                 return body
         except ToolError:
             raise
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            await self._report_tool_end("search_recipes_by_ingredients")
             raise ToolError(f"error: {e!s}") from e
 
     @function_tool(name="get_similar_recipes")
@@ -152,9 +288,8 @@ class DefaultAgent(Agent):
         Args:
             id: The id of the source recipe for which similar recipes should be found.
         """
-        await self._report_tool_start("get_similar_recipes")
 
-        url = f"https://api.spoonacular.com/recipes/{quote(id_, safe='')}/similar?number=3&apiKey=264361e4b8084bd992ed7128e8955736"
+        url = f"https://api.spoonacular.com/recipes/{quote(id_, safe='')}/similar?number=3?apiKey=264361e4b8084bd992ed7128e8955736"
 
         try:
             session = utils.http_context.http_session()
@@ -162,14 +297,11 @@ class DefaultAgent(Agent):
             async with session.get(url, timeout=timeout) as resp:
                 body = await resp.text()
                 if resp.status >= 400:
-                    await self._report_tool_end("get_similar_recipes")
                     raise ToolError(f"error: HTTP {resp.status}: {body}")
-                await self._report_tool_end("get_similar_recipes")
                 return body
         except ToolError:
             raise
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            await self._report_tool_end("get_similar_recipes")
             raise ToolError(f"error: {e!s}") from e
 
     @function_tool(name="summarize_recipe")
@@ -182,7 +314,6 @@ class DefaultAgent(Agent):
         Args:
             id: The recipe id.
         """
-        await self._report_tool_start("summarize_recipe")
 
         url = f"https://api.spoonacular.com/recipes/{quote(id_, safe='')}/summary?apiKey=264361e4b8084bd992ed7128e8955736"
 
@@ -192,14 +323,11 @@ class DefaultAgent(Agent):
             async with session.get(url, timeout=timeout) as resp:
                 body = await resp.text()
                 if resp.status >= 400:
-                    await self._report_tool_end("summarize_recipe")
                     raise ToolError(f"error: HTTP {resp.status}: {body}")
-                await self._report_tool_end("summarize_recipe")
                 return body
         except ToolError:
             raise
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            await self._report_tool_end("summarize_recipe")
             raise ToolError(f"error: {e!s}") from e
 
     @function_tool(name="search_ingredients")
@@ -212,7 +340,6 @@ class DefaultAgent(Agent):
         Args:
             query: The partial or full ingredient name.
         """
-        await self._report_tool_start("search_ingredients")
 
         url = "https://api.spoonacular.com/food/ingredients/search?apiKey=264361e4b8084bd992ed7128e8955736"
         payload = {
@@ -225,14 +352,11 @@ class DefaultAgent(Agent):
             async with session.get(url, timeout=timeout, params=payload) as resp:
                 body = await resp.text()
                 if resp.status >= 400:
-                    await self._report_tool_end("search_ingredients")
                     raise ToolError(f"error: HTTP {resp.status}: {body}")
-                await self._report_tool_end("search_ingredients")
                 return body
         except ToolError:
             raise
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            await self._report_tool_end("search_ingredients")
             raise ToolError(f"error: {e!s}") from e
 
     @function_tool(name="get_recipe_instructions")
@@ -245,7 +369,6 @@ class DefaultAgent(Agent):
         Args:
             id: The recipe id.
         """
-        await self._report_tool_start("get_recipe_instructions")
 
         url = f"https://api.spoonacular.com/recipes/{quote(id_, safe='')}/analyzedInstructions?apiKey=264361e4b8084bd992ed7128e8955736"
 
@@ -255,14 +378,11 @@ class DefaultAgent(Agent):
             async with session.get(url, timeout=timeout) as resp:
                 body = await resp.text()
                 if resp.status >= 400:
-                    await self._report_tool_end("get_recipe_instructions")
                     raise ToolError(f"error: HTTP {resp.status}: {body}")
-                await self._report_tool_end("get_recipe_instructions")
                 return body
         except ToolError:
             raise
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            await self._report_tool_end("get_recipe_instructions")
             raise ToolError(f"error: {e!s}") from e
 
     @function_tool(name="update_user_preferences")
@@ -270,26 +390,29 @@ class DefaultAgent(Agent):
         self, context: RunContext, dietary_restrictions: Optional[str] = None, disliked_ingredients: Optional[str] = None, favorite_cuisines: Optional[str] = None, notes: Optional[str] = None
     ) -> str:
         """
-        Update the user's cooking preferences when they mention dietary restrictions, ingredients they dislike, favorite cuisines, or other relevant information. Pass multiple values as comma-separated strings. Call this whenever you learn something new about the user that should be remembered for future sessions.
+        Update the user's cooking preferences when they mention dietary restrictions, ingredients they dislike, favorite cuisines, or other     
+  relevant information. Pass multiple values as comma-separated strings. Call this whenever you learn something new about the user that   
+  should be remembered for future sessions.
 
         Args:
             dietary_restrictions: Comma-separated dietary restrictions (e.g., "vegetarian, gluten-free, dairy-free")
             disliked_ingredients: Comma-separated ingredients the user dislikes (e.g., "cilantro, olives, mushrooms")
-            favorite_cuisines: Comma-separated cuisines the user enjoys (e.g., "italian, mexican, thai")
-            notes: Other relevant info like skill level or time constraints
+            favorite_cuisines: Comma-separated cuisines the user enjoys (e.g., "italian, mexican, thai")    
+            notes: Other relevant info like skill level or time constraints  
         """
-        await self._report_tool_start("update_user_preferences")
 
         room = get_job_context().room
         linked_participant = context.session.room_io.linked_participant
         if not linked_participant:
-            await self._report_tool_end("update_user_preferences")
             raise ToolError("No linked participant found")
 
         payload = {
             "dietary_restrictions": dietary_restrictions,
+        
             "disliked_ingredients": disliked_ingredients,
+        
             "favorite_cuisines": favorite_cuisines,
+        
             "notes": notes,
         }
 
@@ -300,13 +423,10 @@ class DefaultAgent(Agent):
                 payload=json.dumps(payload),
                 response_timeout=10.0,
             )
-            await self._report_tool_end("update_user_preferences")
             return response
         except ToolError:
-            await self._report_tool_end("update_user_preferences")
             raise
         except Exception as e:
-            await self._report_tool_end("update_user_preferences")
             raise ToolError(f"error: {e!s}") from e
 
 

@@ -32,6 +32,9 @@
 	// Viewing past session transcript
 	let viewingSession: CookingSession | null = $state(null);
 
+	// Session continuation
+	let continuingSession: CookingSession | null = $state(null);
+
 	// User preferences (AI-managed)
 	let userPreferences: UserPreferences | null = $state(null);
 	let userPreferencesId: string | null = $state(null);
@@ -734,6 +737,62 @@
 		viewingSession = session;
 	}
 
+	// Continue an existing session
+	function continueSession(session: CookingSession) {
+		viewingSession = null; // Close the transcript view
+		continuingSession = session;
+
+		// Parse transcript if needed
+		let loadedTranscript = session.transcript;
+		if (typeof loadedTranscript === 'string') {
+			try {
+				loadedTranscript = JSON.parse(loadedTranscript);
+			} catch {
+				loadedTranscript = [];
+			}
+		}
+		transcript = Array.isArray(loadedTranscript) ? loadedTranscript : [];
+
+		// Use the existing session ID
+		currentSessionId = session.id;
+
+		// Reset states for the new connection
+		isInCookingMode = false;
+		hasSetRecipeName = true; // Don't overwrite the recipe name
+
+		startCooking();
+	}
+
+	// Send session context to agent immediately after connecting
+	async function sendSessionContext() {
+		if (!room || !continuingSession) return;
+
+		// Build a summary of the previous conversation for Bruno
+		const transcriptSummary = transcript.map(m =>
+			`${m.role === 'user' ? 'User' : 'Bruno'}: ${m.content}`
+		).join('\n');
+
+		const contextMessage = {
+			type: 'session_context',
+			is_continuation: true,
+			previous_transcript: transcript,
+			transcript_summary: transcriptSummary,
+			recipe_name: continuingSession.recipe_name,
+			recipe_id: continuingSession.selected_recipe_id,
+			current_phase: continuingSession.current_phase,
+			current_step: continuingSession.current_step
+		};
+
+		try {
+			const encoder = new TextEncoder();
+			const data = encoder.encode(JSON.stringify(contextMessage));
+			await room.localParticipant.publishData(data, { reliable: true });
+			console.log('Sent session context to agent for continuation');
+		} catch (err) {
+			console.error('Failed to send session context:', err);
+		}
+	}
+
 	async function startCooking() {
 		if (connectionState === 'connecting') return;
 
@@ -763,13 +822,28 @@
 				console.log('Room connected!');
 				connectionState = 'connected';
 
-				// Create a new cooking session
-				console.log('Attempting to create session...');
+				if (continuingSession) {
+					// Continuing an existing session - send context immediately
+					console.log('Continuing session:', continuingSession.id);
+					await sendSessionContext();
+
+					// Update session status back to in_progress
+					try {
+						await pb.collection('cooking_sessions').update(continuingSession.id, {
+							status: 'in_progress'
+						});
+					} catch (err) {
+						console.error('Failed to update session status:', err);
+					}
+				} else {
+					// Create a new cooking session
+					console.log('Attempting to create session...');
 				try {
 					currentSessionId = await createSession();
 					console.log('Session creation result:', currentSessionId);
 				} catch (err) {
 					console.error('Session creation threw error:', err);
+				}
 				}
 
 				// Send user preferences to the agent after a short delay to ensure agent is ready
@@ -840,6 +914,7 @@
 		connectionState = 'idle';
 		isInCookingMode = false;
 		hasSetRecipeName = false;
+		continuingSession = null;
 	}
 
 	async function handleLogout() {
@@ -856,6 +931,7 @@
 	function handleStartNew() {
 		isInCookingMode = false;
 		hasSetRecipeName = false;
+		continuingSession = null;
 		startCooking();
 	}
 
@@ -1126,6 +1202,7 @@
 	<TranscriptView
 		session={viewingSession}
 		onClose={() => viewingSession = null}
+		onContinue={continueSession}
 	/>
 {/if}
 

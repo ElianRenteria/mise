@@ -46,3 +46,9 @@ export type UserPreferences = {
 	created: string;
 	updated: string;
 };
+
+// Helper to get user avatar URL
+export function getAvatarUrl(userId: string, avatar: string): string | null {
+	if (!avatar) return null;
+	return `${PUBLIC_POCKETBASE_URL}/api/files/users/${userId}/${avatar}`;
+}
