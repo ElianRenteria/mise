@@ -39,6 +39,9 @@
 	let userPreferences: UserPreferences | null = $state(null);
 	let userPreferencesId: string | null = $state(null);
 	let room: Room | null = $state(null);
+
+	// Get user's first name for greeting
+	let userName = $derived(pb.authStore.record?.name?.split(' ')[0] || '');
 	let audioContainer: HTMLDivElement;
 
 	// Agent state for Bruno animation
@@ -745,7 +748,8 @@
 
 		const user = pb.authStore.record;
 		const userId = user?.id;
-		const userName = user?.name || '';
+		// Use first name only for more natural greetings
+		const userName = user?.name?.split(' ')[0] || '';
 
 		// Build a human-readable summary for the agent
 		const prefs = userPreferences || {
@@ -1442,9 +1446,14 @@
 				alt="Bruno the raccoon"
 				class="w-32 h-32 mx-auto drop-shadow-lg"
 			/>
-			<h1 class="text-4xl font-black tracking-tighter text-surface-700 lowercase">
-				welcome to the kitchen
-			</h1>
+			<div>
+				<h1 class="text-4xl font-black tracking-tighter text-surface-700 lowercase">
+					hi{#if userName} <span class="text-primary-500">{userName}</span>{/if}
+				</h1>
+				<p class="text-2xl font-bold tracking-tighter text-surface-600 lowercase">
+					welcome to the kitchen
+				</p>
+			</div>
 			<p class="text-lg font-medium tracking-tighter text-surface-500 lowercase max-w-md">
 				bruno is ready to be your ai sous chef. click below to start your cooking session!
 			</p>
