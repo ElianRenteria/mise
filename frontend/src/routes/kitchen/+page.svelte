@@ -1447,8 +1447,8 @@
 				class="w-32 h-32 mx-auto drop-shadow-lg"
 			/>
 			<div>
-				<h1 class="text-4xl font-black tracking-tighter text-surface-700 lowercase">
-					hi{#if userName} <span class="text-primary-500">{userName}</span>{/if}
+				<h1 class="text-4xl font-black tracking-tighter text-surface-700">
+					Hi{#if userName} <span class="text-primary-500 capitalize">{userName}</span>{/if}
 				</h1>
 				<p class="text-2xl font-bold tracking-tighter text-surface-600 lowercase">
 					welcome to the kitchen
