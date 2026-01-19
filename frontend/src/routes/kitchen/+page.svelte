@@ -17,6 +17,9 @@
 	let showWinking: boolean = $state(false);
 	let talkingInterval: ReturnType<typeof setInterval> | null = null;
 
+	// User speaking state for voice indicator
+	let userIsSpeaking: boolean = $state(false);
+
 	// Toggle between standing and winking when speaking
 	$effect(() => {
 		if (agentState === 'speaking') {
@@ -123,6 +126,11 @@
 
 			// Listen for agent state changes
 			room.on(RoomEvent.ParticipantAttributesChanged, handleParticipantAttributesChanged);
+
+			// Listen for user speaking changes
+			room.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
+				userIsSpeaking = speakers.some(s => s.identity === room?.localParticipant.identity);
+			});
 
 			await room.connect(serverUrl, participantToken);
 
@@ -307,6 +315,49 @@
 		background: #d45e33;
 		color: white;
 	}
+
+	/* Voice wave animation for user speaking */
+	.voice-wave {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 3px;
+		height: 24px;
+	}
+
+	.voice-wave .bar {
+		width: 4px;
+		height: 100%;
+		background: #d45e33;
+		border-radius: 2px;
+		animation: wave 0.8s ease-in-out infinite;
+	}
+
+	.voice-wave .bar:nth-child(1) { animation-delay: 0s; }
+	.voice-wave .bar:nth-child(2) { animation-delay: 0.1s; }
+	.voice-wave .bar:nth-child(3) { animation-delay: 0.2s; }
+	.voice-wave .bar:nth-child(4) { animation-delay: 0.3s; }
+	.voice-wave .bar:nth-child(5) { animation-delay: 0.4s; }
+
+	@keyframes wave {
+		0%, 100% {
+			transform: scaleY(0.3);
+		}
+		50% {
+			transform: scaleY(1);
+		}
+	}
+
+	/* Voice indicator container */
+	.voice-indicator {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 16px;
+		background: rgba(212, 94, 51, 0.1);
+		border-radius: 9999px;
+		transition: opacity 0.2s ease;
+	}
 </style>
 
 <!-- Hidden container for audio elements from the agent -->
@@ -315,27 +366,27 @@
 <div class="min-h-full flex flex-col items-center justify-center px-4 py-12 bg-surface-300">
 	{#if connectionState === 'connected'}
 		<!-- Connected state: Show Bruno -->
-		<div class="bruno-container text-center space-y-6">
-			<div class="relative w-64 h-80 mx-auto">
+		<div class="bruno-container text-center space-y-3">
+			<div class="relative w-64 mx-auto">
 				<!-- Standing Bruno (shown when not speaking or during toggle) -->
 				<img
 					src="{base}/bruno/standing.svg"
 					alt="Bruno the raccoon chef"
-					class="absolute inset-0 w-full h-auto drop-shadow-xl transition-opacity duration-100"
+					class="w-full h-auto drop-shadow-xl transition-opacity duration-100"
 					class:opacity-0={showWinking}
 					class:opacity-100={!showWinking}
 					class:bruno-standing={agentState !== 'speaking'}
 				/>
-				<!-- Winking Bruno (shown during speaking toggle) -->
+				<!-- Bruno with mouth open (shown during speaking toggle) -->
 				<img
-					src="{base}/bruno/winking-spatula.svg"
+					src="{base}/bruno/standing-mouth-open.svg"
 					alt="Bruno the raccoon chef talking"
 					class="absolute inset-0 w-full h-auto drop-shadow-xl transition-opacity duration-100"
 					class:opacity-100={showWinking}
 					class:opacity-0={!showWinking}
 				/>
 			</div>
-			<h1 class="text-3xl font-black tracking-tighter text-surface-700 lowercase">
+			<h1 class="text-2xl font-black tracking-tighter text-surface-700 lowercase">
 				{#if agentState === 'speaking'}
 					bruno is cooking up an answer...
 				{:else if agentState === 'thinking'}
@@ -344,14 +395,31 @@
 					bruno is ready to help!
 				{/if}
 			</h1>
-			<p class="text-lg font-medium tracking-tighter text-surface-500 lowercase max-w-md">
+			<p class="text-base font-medium tracking-tighter text-surface-500 lowercase max-w-md">
 				{#if agentState === 'speaking'}
 					listen to bruno's advice!
 				{:else}
 					your ai sous chef is listening. ask me anything about cooking!
 				{/if}
 			</p>
-			<button onclick={stopCooking} class="stop-btn mt-4">
+
+			<!-- Voice indicator when user is speaking -->
+			{#if userIsSpeaking}
+				<div class="flex justify-center">
+					<div class="voice-indicator">
+						<div class="voice-wave">
+							<div class="bar"></div>
+							<div class="bar"></div>
+							<div class="bar"></div>
+							<div class="bar"></div>
+							<div class="bar"></div>
+						</div>
+						<span class="text-sm font-semibold tracking-tighter text-primary-500 lowercase">speaking...</span>
+					</div>
+				</div>
+			{/if}
+
+			<button onclick={stopCooking} class="stop-btn mt-2">
 				leave kitchen
 			</button>
 		</div>
