@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { base } from '$app/paths';
 	import { pb } from '$lib/pocketbase';
 
 	let email = $state('');
@@ -29,7 +30,7 @@
 			<!-- mise branding -->
 			<div class="flex flex-col items-center mb-6">
 				<img
-					src="/bruno/head.svg"
+					src="{base}/bruno/head.svg"
 					alt="Bruno the raccoon"
 					class="w-52 h-52 md:w-60 md:h-60 -mb-4"
 					style="filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.25)) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.2)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.15));"
@@ -50,7 +51,7 @@
 					<p class="text-sm font-medium tracking-tighter text-surface-500">
 						we've sent a password reset link to {email}
 					</p>
-					<a href="/" class="mise-link block mt-4">back to login</a>
+					<a href="{base}/" class="mise-link block mt-4">back to login</a>
 				</div>
 			{:else}
 				<form onsubmit={handleReset} class="space-y-6">
@@ -86,7 +87,7 @@
 				</form>
 
 				<div class="mt-6 text-center">
-					<a href="/" class="mise-link">back to login</a>
+					<a href="{base}/" class="mise-link">back to login</a>
 				</div>
 			{/if}
 		</div>

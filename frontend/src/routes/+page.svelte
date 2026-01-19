@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { pb } from '$lib/pocketbase';
 
 	let email = $state('');
@@ -30,7 +31,7 @@
 			<!-- mise branding -->
 			<div class="flex flex-col items-center mb-6">
 				<img
-					src="/bruno/head.svg"
+					src="{base}/bruno/head.svg"
 					alt="Bruno the raccoon"
 					class="w-52 h-52 md:w-60 md:h-60 -mb-4"
 					style="filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.25)) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.2)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.15));"
@@ -89,10 +90,10 @@
 
 			<div class="mt-6 text-center space-y-2">
 				<p class="text-sm text-surface-500 font-medium tracking-tighter">
-					<a href="/forgot-password" class="mise-link">forgot password?</a>
+					<a href="{base}/forgot-password" class="mise-link">forgot password?</a>
 				</p>
 				<p class="text-sm text-surface-500 font-medium tracking-tighter">
-					don't have an account? <a href="/signup" class="mise-link">create account</a>
+					don't have an account? <a href="{base}/signup" class="mise-link">create account</a>
 				</p>
 			</div>
 		</div>

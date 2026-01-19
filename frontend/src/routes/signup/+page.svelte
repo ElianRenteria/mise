@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { pb } from '$lib/pocketbase';
 
 	let email = $state('');
@@ -119,7 +120,7 @@
 
 			<div class="mt-6 text-center">
 				<p class="text-sm text-surface-500 font-medium tracking-tighter">
-					already have an account? <a href="/" class="mise-link">login</a>
+					already have an account? <a href="{base}/" class="mise-link">login</a>
 				</p>
 			</div>
 		</div>

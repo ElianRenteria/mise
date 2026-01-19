@@ -1,14 +1,59 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { pb } from '$lib/pocketbase';
-	import { Room, RoomEvent, ConnectionState, TokenSource, Track, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant } from 'livekit-client';
-	import { onDestroy, onMount } from 'svelte';
+	import { Room, RoomEvent, ConnectionState, TokenSource, Track, ParticipantKind, type RemoteTrack, type RemoteTrackPublication, type RemoteParticipant, type Participant } from 'livekit-client';
+	import { onDestroy } from 'svelte';
 
 	// Connection state
 	let connectionState: 'idle' | 'connecting' | 'connected' | 'error' = $state('idle');
 	let errorMessage: string = $state('');
 	let room: Room | null = $state(null);
 	let audioContainer: HTMLDivElement;
+
+	// Agent state for Bruno animation
+	type AgentState = 'initializing' | 'listening' | 'thinking' | 'speaking';
+	let agentState: AgentState = $state('initializing');
+	let showWinking: boolean = $state(false);
+	let talkingInterval: ReturnType<typeof setInterval> | null = null;
+
+	// Toggle between standing and winking when speaking
+	$effect(() => {
+		if (agentState === 'speaking') {
+			// Start alternating images
+			talkingInterval = setInterval(() => {
+				showWinking = !showWinking;
+			}, 300); // Toggle every 300ms for talking effect
+		} else {
+			// Stop alternating and show standing
+			if (talkingInterval) {
+				clearInterval(talkingInterval);
+				talkingInterval = null;
+			}
+			showWinking = false;
+		}
+
+		return () => {
+			if (talkingInterval) {
+				clearInterval(talkingInterval);
+			}
+		};
+	});
+
+	// Handle agent state changes from participant attributes
+	function handleParticipantAttributesChanged(
+		changedAttributes: Record<string, string>,
+		participant: Participant
+	) {
+		// Check if this is an agent participant
+		if (participant.kind === ParticipantKind.AGENT) {
+			const state = participant.attributes['lk.agent.state'] as AgentState | undefined;
+			if (state) {
+				console.log('Agent state changed:', state);
+				agentState = state;
+			}
+		}
+	}
 
 	// Handle incoming audio tracks from the agent
 	function handleTrackSubscribed(
@@ -75,6 +120,9 @@
 			// Subscribe to audio tracks from the agent
 			room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
 			room.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+
+			// Listen for agent state changes
+			room.on(RoomEvent.ParticipantAttributesChanged, handleParticipantAttributesChanged);
 
 			await room.connect(serverUrl, participantToken);
 
@@ -266,18 +314,42 @@
 
 <div class="min-h-full flex flex-col items-center justify-center px-4 py-12 bg-surface-300">
 	{#if connectionState === 'connected'}
-		<!-- Connected state: Show Bruno standing -->
+		<!-- Connected state: Show Bruno -->
 		<div class="bruno-container text-center space-y-6">
-			<img
-				src="/bruno/standing.svg"
-				alt="Bruno the raccoon chef"
-				class="bruno-standing w-64 h-auto mx-auto drop-shadow-xl"
-			/>
+			<div class="relative w-64 h-80 mx-auto">
+				<!-- Standing Bruno (shown when not speaking or during toggle) -->
+				<img
+					src="{base}/bruno/standing.svg"
+					alt="Bruno the raccoon chef"
+					class="absolute inset-0 w-full h-auto drop-shadow-xl transition-opacity duration-100"
+					class:opacity-0={showWinking}
+					class:opacity-100={!showWinking}
+					class:bruno-standing={agentState !== 'speaking'}
+				/>
+				<!-- Winking Bruno (shown during speaking toggle) -->
+				<img
+					src="{base}/bruno/winking-spatula.svg"
+					alt="Bruno the raccoon chef talking"
+					class="absolute inset-0 w-full h-auto drop-shadow-xl transition-opacity duration-100"
+					class:opacity-100={showWinking}
+					class:opacity-0={!showWinking}
+				/>
+			</div>
 			<h1 class="text-3xl font-black tracking-tighter text-surface-700 lowercase">
-				bruno is ready to help!
+				{#if agentState === 'speaking'}
+					bruno is cooking up an answer...
+				{:else if agentState === 'thinking'}
+					bruno is thinking...
+				{:else}
+					bruno is ready to help!
+				{/if}
 			</h1>
 			<p class="text-lg font-medium tracking-tighter text-surface-500 lowercase max-w-md">
-				your ai sous chef is listening. ask me anything about cooking!
+				{#if agentState === 'speaking'}
+					listen to bruno's advice!
+				{:else}
+					your ai sous chef is listening. ask me anything about cooking!
+				{/if}
 			</p>
 			<button onclick={stopCooking} class="stop-btn mt-4">
 				leave kitchen
@@ -287,7 +359,7 @@
 		<!-- Idle/Connecting/Error state: Show button -->
 		<div class="text-center space-y-8">
 			<img
-				src="/bruno/head.svg"
+				src="{base}/bruno/head.svg"
 				alt="Bruno the raccoon"
 				class="w-32 h-32 mx-auto drop-shadow-lg"
 			/>
