@@ -51,6 +51,9 @@
 	// User speaking state for voice indicator
 	let userIsSpeaking: boolean = $state(false);
 
+	// Microphone mute state
+	let isMuted: boolean = $state(false);
+
 	// Tool usage tracking
 	let isUsingTool: boolean = $state(false);
 	let currentToolName: string = $state('');
@@ -709,6 +712,47 @@
 		}
 	}
 
+	// Handle get_user_favorites RPC from agent
+	async function handleGetUserFavoritesRpc(params: Record<string, any>) {
+		console.log('Processing get user favorites:', params);
+
+		const userId = pb.authStore.record?.id;
+		if (!userId) {
+			console.warn('No user logged in');
+			throw new Error('Not logged in');
+		}
+
+		try {
+			// Build filter
+			let filter = `user = "${userId}"`;
+
+			// Optional: search by name
+			if (params.search) {
+				filter += ` && recipe_name ~ "${params.search}"`;
+			}
+
+			const records = await pb.collection('favorite_recipes').getList(1, 20, {
+				filter,
+				sort: '-rating,-created' // Sort by rating first, then by most recent
+			});
+
+			// Return simplified list for the agent
+			const favorites = records.items.map((item: any) => ({
+				recipe_id: item.recipe_id,
+				recipe_name: item.recipe_name,
+				rating: item.rating,
+				ingredients: item.ingredients,
+				description: item.description
+			}));
+
+			console.log('Found favorites:', favorites.length);
+			return { success: true, favorites, count: favorites.length };
+		} catch (err) {
+			console.error('Failed to get favorites:', err);
+			throw err;
+		}
+	}
+
 	// Handle the update_user_preferences client tool call (legacy data channel method)
 	// Params come as comma-separated strings from the agent
 	async function handleUpdatePreferencesTool(
@@ -1117,6 +1161,19 @@
 				}
 			});
 
+			// Register RPC handler for getting user's favorite recipes
+			room.localParticipant.registerRpcMethod('get_user_favorites', async (data: RpcInvocationData) => {
+				console.log('RPC received: get_user_favorites', data.payload);
+				try {
+					const params = JSON.parse(data.payload || '{}');
+					const result = await handleGetUserFavoritesRpc(params);
+					return JSON.stringify(result);
+				} catch (err) {
+					console.error('Failed to get favorites RPC:', err);
+					return JSON.stringify({ success: false, error: 'Failed to get favorites', favorites: [] });
+				}
+			});
+
 			await room.connect(serverUrl, participantToken);
 
 			// Enable microphone for voice interaction (requires HTTPS on mobile)
@@ -1150,6 +1207,19 @@
 		isInCookingMode = false;
 		hasSetRecipeName = false;
 		continuingSession = null;
+		isMuted = false;
+	}
+
+	async function toggleMute() {
+		if (!room) return;
+
+		try {
+			const newMuteState = !isMuted;
+			await room.localParticipant.setMicrophoneEnabled(!newMuteState);
+			isMuted = newMuteState;
+		} catch (err) {
+			console.error('Failed to toggle mute:', err);
+		}
 	}
 
 	async function handleLogout() {
@@ -1422,6 +1492,29 @@
 	.bruno-voice-wave .bar:nth-child(3) { animation-delay: 0.2s; }
 	.bruno-voice-wave .bar:nth-child(4) { animation-delay: 0.3s; }
 	.bruno-voice-wave .bar:nth-child(5) { animation-delay: 0.4s; }
+
+	/* Mute button */
+	.mute-btn {
+		width: 48px;
+		height: 48px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: 2px solid #d45e33;
+		border-radius: 9999px;
+		cursor: pointer;
+		background: transparent;
+		color: #d45e33;
+		transition: all 0.3s ease;
+	}
+
+	.mute-btn:hover {
+		background: rgba(212, 94, 51, 0.1);
+	}
+
+	.mute-btn:active {
+		transform: scale(0.95);
+	}
 </style>
 
 <!-- Session Sidebar -->
@@ -1568,9 +1661,23 @@
 				</div>
 			{/if}
 
-			<button onclick={stopCooking} class="stop-btn mt-2">
-				leave kitchen
-			</button>
+			<div class="flex items-center justify-center gap-3 mt-2">
+				<button onclick={toggleMute} class="mute-btn" aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}>
+					{#if isMuted}
+						<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+						</svg>
+					{:else}
+						<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+						</svg>
+					{/if}
+				</button>
+				<button onclick={stopCooking} class="stop-btn">
+					leave kitchen
+				</button>
+			</div>
 		</div>
 	{:else if connectionState === 'connecting'}
 		<!-- Connecting state: Show loading skeleton -->

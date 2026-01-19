@@ -23,6 +23,7 @@
 	// Favorites
 	let favorites: FavoriteRecipe[] = $state([]);
 	let loadingFavorites = $state(false);
+	let favoritesLoaded = $state(false);
 	let selectedFavorite: FavoriteRecipe | null = $state(null);
 
 	// UI state
@@ -89,8 +90,10 @@
 				sort: '-created'
 			});
 			favorites = records.items;
+			favoritesLoaded = true;
 		} catch (err) {
 			console.error('Failed to load favorites:', err);
+			favoritesLoaded = true; // Mark as loaded even on error to prevent infinite retries
 		} finally {
 			loadingFavorites = false;
 		}
@@ -122,7 +125,7 @@
 
 	// Load favorites when switching to that tab
 	$effect(() => {
-		if (activeTab === 'favorites' && favorites.length === 0) {
+		if (activeTab === 'favorites' && !favoritesLoaded && !loadingFavorites) {
 			loadFavorites();
 		}
 	});
@@ -441,15 +444,15 @@
 							onclick={() => selectedFavorite = favorite}
 							class="w-full bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow text-left"
 						>
-							<div class="flex gap-4">
+							<div class="flex gap-4 items-center">
 								{#if favorite.recipe_image}
 									<img
 										src={favorite.recipe_image}
 										alt={favorite.recipe_name}
-										class="w-20 h-20 rounded-xl object-cover bg-surface-100"
+										class="w-24 h-24 rounded-xl object-cover bg-surface-100 flex-shrink-0"
 									/>
 								{:else}
-									<div class="w-20 h-20 rounded-xl bg-surface-100 flex items-center justify-center text-3xl">
+									<div class="w-24 h-24 rounded-xl bg-surface-100 flex items-center justify-center text-4xl flex-shrink-0">
 										🍳
 									</div>
 								{/if}
