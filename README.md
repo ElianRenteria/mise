@@ -84,7 +84,7 @@ whether you're a beginner or experienced cook, whether you have a full pantry or
 
 ## try it
 
-[mise.elianrenteria.dev](https://misekitchen.app)
+[misekitchen.app](https://misekitchen.app)
 
 ---
 
